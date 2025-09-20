@@ -1,0 +1,45 @@
+-- Run this script in your SQL Server to create the database objects
+CREATE DATABASE CarniceriaDB;
+GO
+USE CarniceriaDB;
+GO
+
+
+CREATE TABLE Clientes (
+ClienteID INT IDENTITY(1,1) PRIMARY KEY,
+NumeroTelefono NVARCHAR(30) UNIQUE NOT NULL,
+Nombre NVARCHAR(200) NULL,
+Direccion NVARCHAR(500) NULL,
+FechaAlta DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+Activo BIT NOT NULL DEFAULT 1
+);
+
+
+CREATE TABLE Pedidos (
+PedidoID BIGINT IDENTITY(1,1) PRIMARY KEY,
+ClienteID INT NOT NULL FOREIGN KEY REFERENCES Clientes(ClienteID),
+Folio NVARCHAR(30) NOT NULL,
+Contenido NVARCHAR(MAX) NOT NULL,
+Estado NVARCHAR(50) NOT NULL DEFAULT 'En espera de surtir',
+Fecha DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+Notas NVARCHAR(1000) NULL
+);
+
+
+CREATE TABLE Conversaciones (
+NumeroTelefono NVARCHAR(30) PRIMARY KEY,
+Estado NVARCHAR(50) NOT NULL,
+Buffer NVARCHAR(MAX) NULL,
+UltimaInteraccion DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+);
+
+
+CREATE TABLE TelefonosAtencion (
+TelefonoID INT IDENTITY(1,1) PRIMARY KEY,
+Etiqueta NVARCHAR(100) NOT NULL,
+Telefono NVARCHAR(50) NOT NULL
+);
+
+
+INSERT INTO TelefonosAtencion (Etiqueta, Telefono) VALUES ('Sucursal 8','8145678901');
+INSERT INTO TelefonosAtencion (Etiqueta, Telefono) VALUES ('Atencion Precios','8198765432');

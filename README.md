@@ -14,11 +14,7 @@ Este proyecto está construido con Node.js y tiene como objetivo servir como bas
 
 🛠️ Configurado con Git y buenas prácticas de versionado
 
-📦 Instalación
-git clone https://github.com/tuusuario/tu-repo.git
-cd tu-repo
-npm install
-npm start
+📦 Instalación git clone https://github.com/tuusuario/tu-repo.git cd tu-repo npm install npm start
 
 🤝 Contribución
 
