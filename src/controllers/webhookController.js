@@ -163,7 +163,7 @@ async function handleButton(from, buttonId, session, numeroCorregido) {
             break;
         case 'BTN_ESTATUS_PEDIDO':
             await WhatsappService.sendFindingLastOrderStatus(numeroCorregido);
-            await WhatsappService.sendLastOrderStatus(numeroCorregido);
+            await WhatsappService.sendLastOrderStatus(numeroCorregido, from);
             await WhatsappService.sendAlternativeMenu(numeroCorregido);
             break;
         case 'BTN_INFORMACION':

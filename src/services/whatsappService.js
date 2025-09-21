@@ -131,8 +131,8 @@ export default {
         return apiSend({ messaging_product: 'whatsapp', to, type: 'text', text: { body: 'Buscando tu último pedido...' } });
     },
 
-    sendLastOrderStatus: async (to) => {
-        const LastOrder = await dbService.getUltimoPedidoPorCliente(to);
+    sendLastOrderStatus: async (to, from) => {
+        const LastOrder = await dbService.getUltimoPedidoPorCliente(from);
         if (!LastOrder) return apiSend({ 
             messaging_product: 'whatsapp', to, type: 'text', text: { 
                 body: 'No hay pedidos pendientes.' 
@@ -140,7 +140,7 @@ export default {
         });
         return apiSend({ 
             messaging_product: 'whatsapp', to, type: 'text', text: { 
-                body: `Tu último pedido fue realizado el ${LastOrder.Fecha} y tiene el siguiente estado: ${LastOrder.Estado}` 
+                body: `Tu último pedido realizado tiene el siguiente estado:\n ${LastOrder.Estado}` 
             } 
         });
     },
