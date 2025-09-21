@@ -1,6 +1,5 @@
-import debug from 'debug';
-const log = debug('carnibot:print');
 import escpos from 'escpos';
+import logger from './logger.js';
 // require network/usb adapters as needed in runtime
 
 function openDevice(device) {
@@ -39,7 +38,7 @@ export async function printTicket(data, host = '192.168.0.100', port = 9100) {
         printer.text(`Total: $${data.total}`);
         printer.cut();
     } catch (err) {
-        console.error('❌ Error al imprimir:', err.message);
+        logger.error('❌ Error al imprimir:', err.message);
         throw err;
     }
 }

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import dbService from '../services/dbService.js';
+import logger from './logger.js';
 
 dotenv.config();
 
@@ -8,13 +9,22 @@ const API_BASE = (id) => `https://graph.facebook.com/v21.0/${id}/messages`;
 const PHONE_ID = process.env.PHONE_NUMBER_ID;
 const TOKEN = process.env.WHATSAPP_TOKEN;
 
+function assertEnv() {
+  if (!WHATSAPP_TOKEN) throw new Error('WHATSAPP_TOKEN no está definido en .env');
+  if (!PHONE_NUMBER_ID) throw new Error('PHONE_NUMBER_ID no está definido en .env');
+}
+assertEnv();
+
 async function apiSend(payload) {
+    if (!to) throw new Error('apiSend: parámetro "to" es requerido');
     try {
         const res = await axios.post(API_BASE(PHONE_ID), payload, {
         headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }
         });
+        logger.info('✅ Mensaje enviado', res.data);
         return res.data;
     } catch (err) {
+        logger.error('whatsapp send error', err.response?.data || err.message || err);
         throw err;
     }
 }

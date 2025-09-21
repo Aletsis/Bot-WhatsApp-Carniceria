@@ -1,6 +1,4 @@
 import sql from 'mssql';
-import debug from 'debug';
-const log = debug('carnibot:session');
 import { getPool } from './dbService.js';
 
 

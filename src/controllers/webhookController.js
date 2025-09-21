@@ -1,11 +1,9 @@
-import debug from 'debug';
 import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import {printTicket} from '../services/printingService.js';
 import DBService from '../services/dbService.js';
-import e from 'express';
+import logger from '../services/logger.js';
 
-const log = debug('carnibot:webhook');
 
 export async function verifyWebhookHandler(req, res) {
   const mode = req.query['hub.mode'];
@@ -30,15 +28,15 @@ export async function messageWebhookHandler(req, res) {
     const numeroCorregido = from.slice(0, 2) + from.slice(2 + 1);
     const buttonId = message.interactive?.button_reply?.id;
 
-    console.log('received from %s text=%s button=%s', from, text, buttonId);
+    logger.info('received from %s text=%s button=%s', from, text, buttonId);
 
     //Verificamos si existe una conversacion con el numero de telefono o creamos una nueva
     const session = await SessionService.getOrCreateSession(from);
     await handleBySessionState(from, text, session, numeroCorregido, buttonId);
     return res.sendStatus(200);
     } catch (err) {
-        console.error('❌ Error al procesar mensaje:', err.message);
-        return res.sendStatus(500);
+        logger.error('❌ Error al procesar mensaje:', err.message);
+        return res.sendStatus(500).send({ error: 'Internal server error' });
     }
 }
 async function handleBySessionState(from, text, session, numeroCorregido, buttonId) {
@@ -87,8 +85,8 @@ async function handleBySessionState(from, text, session, numeroCorregido, button
             await WhatsappService.sendAddressRequest(numeroCorregido);
             return;
         case 'ASK_ADDRESS':
-            const cliente = await DBService.getClienteByPhone(from);
-            if (!cliente) {
+            const customer = await DBService.getClienteByPhone(from);
+            if (!customer) {
                 await DBService.createCliente({ telefono: from, nombre: session.NombreTemporal || '', direccion: text });
                 await WhatsappService.sendOrderRequest(numeroCorregido);
                 await SessionService.updateSession(from, { Estado: 'TAKING_ORDER', NombreTemporal: null });
@@ -96,7 +94,7 @@ async function handleBySessionState(from, text, session, numeroCorregido, button
                 await DBService.updateCliente(from, text);
                 const buf = JSON.parse(session.Buffer || '{"pedido": ""}');
                 const folio = DBService.generateFolio();
-                await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
+                await DBService.createPedido(customer.ClienteID, folio, 'En espera de surtir', buf.pedido);
                 await WhatsappService.sendOrderConfirmation(numeroCorregido, folio);
                 await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
             }

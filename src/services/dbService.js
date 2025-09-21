@@ -1,7 +1,6 @@
 import sql from 'mssql';
 import dayjs from 'dayjs';
-import debug from 'debug';
-const log = debug('carnibot:db');
+import logger from './logger.js';
 
 let poolPromise = null;
 let poolInstance = null;
@@ -51,7 +50,7 @@ export default {
         .query('SELECT * FROM Clientes WHERE NumeroTelefono = @telefono');
       return res.recordset[0] || null;
     } catch (err) {
-      console.error('Error obteniendo cliente', err);
+      logger.error('Error obteniendo cliente', err);
       return null;
     }
   },
