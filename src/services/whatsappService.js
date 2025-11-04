@@ -1,7 +1,7 @@
 import axios from 'axios';
 import dotenv from 'dotenv';
 import dbService from '../services/dbService.js';
-import logger from './logger.js';
+import logger from '../logger.js';
 
 dotenv.config();
 
@@ -10,12 +10,13 @@ const PHONE_ID = process.env.PHONE_NUMBER_ID;
 const TOKEN = process.env.WHATSAPP_TOKEN;
 
 function assertEnv() {
-  if (!WHATSAPP_TOKEN) throw new Error('WHATSAPP_TOKEN no está definido en .env');
-  if (!PHONE_NUMBER_ID) throw new Error('PHONE_NUMBER_ID no está definido en .env');
+  if (!TOKEN) throw new Error('WHATSAPP_TOKEN no está definido en .env');
+  if (!PHONE_ID) throw new Error('PHONE_ID no está definido en .env');
 }
 assertEnv();
 
 async function apiSend(payload) {
+    const to = payload.to;
     if (!to) throw new Error('apiSend: parámetro "to" es requerido');
     try {
         const res = await axios.post(API_BASE(PHONE_ID), payload, {

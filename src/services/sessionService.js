@@ -1,11 +1,12 @@
 import sql from 'mssql';
 import { getPool } from './dbService.js';
+import logger from '../logger.js';
 
 
 // Sessions are persisted in table Conversaciones
 export default {
     getOrCreateSession: async (phone) => {
-      console.log('Buscando sesión %s', phone);
+      logger.info('Buscando sesión %s', phone);
         const pool = await getPool();
         const result = await pool.request()
           .input('Telefono', sql.NVarChar, phone)
@@ -13,7 +14,7 @@ export default {
         if (result.recordset.length > 0) return result.recordset[0];
 
         // create
-        console.log('Creando sesión %s', phone);
+        logger.info('Creando sesión %s', phone);
         await pool.request()
           .input('Telefono', sql.NVarChar, phone)
           .input('Estado', sql.NVarChar, 'START')

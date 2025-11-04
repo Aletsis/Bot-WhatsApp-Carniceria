@@ -1,5 +1,6 @@
 import escpos from 'escpos';
-import logger from './logger.js';
+const Network = escpos.Network;
+import logger from '../logger.js';
 // require network/usb adapters as needed in runtime
 
 function openDevice(device) {

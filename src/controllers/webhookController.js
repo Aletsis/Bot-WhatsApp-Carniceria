@@ -2,7 +2,7 @@ import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import {printTicket} from '../services/printingService.js';
 import DBService from '../services/dbService.js';
-import logger from '../services/logger.js';
+import logger from '../logger.js';
 
 
 export async function verifyWebhookHandler(req, res) {
@@ -21,11 +21,17 @@ export async function messageWebhookHandler(req, res) {
     const entry = req.body.entry?.[0];
     const change = entry?.changes?.[0];
     const message = change?.value?.messages?.[0];
-    if (!message) return res.sendStatus(200);
+    if (!message || message.type === 'status') {
+        return res.sendStatus(200);
+    }
+    if (!message.text?.body && !message.interactive?.button_reply) {
+        logger.warn('Mensaje sin contenido procesable');
+        return res.sendStatus(200);
+    }
 
     const from = message.from; // phone number
     const text = message.text?.body || '';
-    const numeroCorregido = from.slice(0, 2) + from.slice(2 + 1);
+    const numeroCorregido = from.slice(0, 2) + from.slice(3);
     const buttonId = message.interactive?.button_reply?.id;
 
     logger.info('received from %s text=%s button=%s', from, text, buttonId);
@@ -36,7 +42,7 @@ export async function messageWebhookHandler(req, res) {
     return res.sendStatus(200);
     } catch (err) {
         logger.error('❌ Error al procesar mensaje:', err.message);
-        return res.sendStatus(500).send({ error: 'Internal server error' });
+        return res.status(500).send({ error: 'Internal server error' });
     }
 }
 async function handleBySessionState(from, text, session, numeroCorregido, buttonId) {

@@ -1,5 +1,5 @@
 // utils/shutdownHelper.js
-import logger from './logger.js';
+import logger from '../logger.js';
 
 let shuttingDown = false;
 

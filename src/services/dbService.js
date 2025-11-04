@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import dayjs from 'dayjs';
-import logger from './logger.js';
+import logger from '../logger.js';
 
 let poolPromise = null;
 let poolInstance = null;
@@ -25,12 +25,12 @@ export async function getPool() {
   poolPromise = sql.connect(config)
     .then(pool => {
       poolInstance = pool;
-      console.log('[DB] Conectado correctamente');
+      logger.info('[DB] Conectado correctamente');
       return pool;
     })
     .catch(err => {
       poolPromise = null;
-      console.error('[DB] Error de conexión:', err.message);
+      logger.error('[DB] Error de conexión:', err.message);
       throw err;
     });
 
