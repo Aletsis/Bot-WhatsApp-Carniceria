@@ -22,6 +22,12 @@ checkEnv();
 
 const app = express();
 
+// Configurar trust proxy de manera restrictiva
+// Para desarrollo: solo confía en loopback (localhost)
+// Para producción con IIS: especifica el número de proxies (usualmente 1)
+const isProduction = process.env.NODE_ENV === 'production';
+app.set('trust proxy', isProduction ? 1 : 'loopback');
+
 // Rate limiting global
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -29,6 +35,7 @@ const globalLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false }, // Deshabilitar validación estricta
   handler: (req, res) => {
     logger.warn('🚨 Rate limit excedido desde IP: %s', req.ip);
     res.status(429).json({ error: 'Too many requests, please try again later.' });
@@ -42,6 +49,7 @@ const webhookLimiter = rateLimit({
   message: { error: 'Too many webhook requests' },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false }, // Deshabilitar validación estricta
   handler: (req, res) => {
     logger.warn('🚨 Webhook rate limit excedido desde: %s', req.ip);
     res.status(429).json({ error: 'Too many webhook requests' });

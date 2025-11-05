@@ -63,6 +63,9 @@ export async function messageWebhookHandler(req, res) {
     }
 
     const session = await SessionService.getOrCreateSession(from);
+    logger.info('Sesión actual para %s: %o', from, session);
+    logger.info('Estado de sesión: %s', session.Estado);
+    logger.info('Llamando a handleBySessionState...');
     await handleBySessionState(from, text, session, numeroCorregido, buttonId);
     
     return res.sendStatus(200);
@@ -74,6 +77,7 @@ export async function messageWebhookHandler(req, res) {
 
 async function handleBySessionState(from, text, session, numeroCorregido, buttonId) {
     const state = session?.Estado || 'START';
+    let result;
     
     switch (state) {
         case 'START':
@@ -81,7 +85,10 @@ async function handleBySessionState(from, text, session, numeroCorregido, button
             break;
         
         case 'MENU':
-            await handleMenuState(from, text, buttonId, session, numeroCorregido);
+            result = await handleMenuState(from, text, buttonId, session, numeroCorregido);
+            if (result?.shouldHandleButton && buttonId) {
+                await handleButton(from, buttonId, session, numeroCorregido);
+            }
             break;
             
         case 'ASK_NAME':
@@ -93,11 +100,17 @@ async function handleBySessionState(from, text, session, numeroCorregido, button
             break;
             
         case 'TAKING_ORDER':
-            await handleTakingOrderState(from, text, buttonId, session, numeroCorregido);
+            result = await handleTakingOrderState(from, text, buttonId, session, numeroCorregido);
+            if (result?.shouldHandleButton && buttonId) {
+                await handleButton(from, buttonId, session, numeroCorregido);
+            }
             break;
             
         case 'AWAITING_CONFIRM':
-            await handleAwaitingConfirmState(from, buttonId, session, numeroCorregido);
+            result = await handleAwaitingConfirmState(from, buttonId, session, numeroCorregido);
+            if (result?.shouldHandleButton && buttonId) {
+                await handleButton(from, buttonId, session, numeroCorregido);
+            }
             break;
             
         default:

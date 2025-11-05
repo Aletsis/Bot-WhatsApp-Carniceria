@@ -27,6 +27,7 @@ export async function handleStartState(from, numeroCorregido) {
  */
 export async function handleMenuState(from, text, buttonId, session, numeroCorregido) {
   if (buttonId) {
+    logger.info('⏳ Esperando manejo de botón para %s', from);
     // Los botones se manejan en buttonHandlers.js
     return { shouldHandleButton: true };
   }
@@ -185,7 +186,7 @@ export async function handleTakingOrderState(from, text, buttonId, session, nume
 /**
  * Maneja el estado AWAITING_CONFIRM - Esperando confirmación final
  */
-export async function handleAwaitingConfirmState(from, buttonId) {
+export async function handleAwaitingConfirmState(from, buttonId, session, numeroCorregido) {
   if (buttonId) {
     return { shouldHandleButton: true };
   }
