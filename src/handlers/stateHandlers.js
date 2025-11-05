@@ -36,6 +36,9 @@ export async function handleMenuState(from, text, buttonId, session, numeroCorre
   
   const textLower = text.trim().toLowerCase();
   
+  // Opciones válidas del menú
+  const validOptions = ['hacer pedido', 'estado pedido', 'informacion', 'información'];
+  
   if (textLower === 'hacer pedido') {
     const cliente = await DBService.getClienteByPhone(from);
     if (!cliente) {
@@ -55,8 +58,21 @@ export async function handleMenuState(from, text, buttonId, session, numeroCorre
     return { shouldHandleButton: false };
   }
   
-  // Opción no reconocida, mostrar menú nuevamente
+  if (textLower === 'informacion' || textLower === 'información') {
+    await WhatsappService.sendInformationOptions(numeroCorregido);
+    return { shouldHandleButton: false };
+  }
+  
+  // Opción no reconocida - informar al usuario
+  await WhatsappService.sendText(numeroCorregido,
+    '❌ No entendí tu respuesta. Por favor, selecciona una opción del menú usando los botones o escribe:\n\n' +
+    '📝 "Hacer pedido"\n' +
+    '📊 "Estado pedido"\n' +
+    'ℹ️ "Información"'
+  );
   await WhatsappService.sendMainMenu(numeroCorregido);
+  
+  logger.warn('⚠️  Opción de menú no válida de %s: %s', from, text);
   return { shouldHandleButton: false };
 }
 
@@ -64,11 +80,36 @@ export async function handleMenuState(from, text, buttonId, session, numeroCorre
  * Maneja el estado ASK_NAME - Solicitar nombre del cliente
  */
 export async function handleAskNameState(from, text, numeroCorregido) {
-  const validation = validateText(text, 2, 200);
+  // Validar longitud mínima de nombre (al menos 2 caracteres)
+  const validation = validateText(text, 2, 100);
   
   if (!validation.isValid) {
     await WhatsappService.sendText(numeroCorregido, 
-      `❌ ${validation.error}. Por favor, escribe tu nombre completo.`);
+      `❌ ${validation.error}.\n\n` +
+      '📝 Por favor, escribe tu nombre completo (mínimo 2 caracteres).\n' +
+      'Ejemplo: Juan Pérez'
+    );
+    logger.warn('⚠️  Nombre inválido de %s: %s', from, validation.error);
+    return;
+  }
+  
+  // Validar que el nombre no sea solo números
+  if (/^\d+$/.test(validation.sanitized)) {
+    await WhatsappService.sendText(numeroCorregido,
+      '❌ El nombre no puede ser solo números. Por favor, escribe tu nombre completo.\n' +
+      'Ejemplo: Juan Pérez'
+    );
+    logger.warn('⚠️  Nombre solo números de %s', from);
+    return;
+  }
+  
+  // Validar que tenga al menos una letra
+  if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(validation.sanitized)) {
+    await WhatsappService.sendText(numeroCorregido,
+      '❌ El nombre debe contener letras. Por favor, escribe tu nombre completo.\n' +
+      'Ejemplo: Juan Pérez'
+    );
+    logger.warn('⚠️  Nombre sin letras de %s', from);
     return;
   }
   
@@ -86,11 +127,37 @@ export async function handleAskNameState(from, text, numeroCorregido) {
  * Maneja el estado ASK_ADDRESS - Solicitar dirección
  */
 export async function handleAskAddressState(from, text, session, numeroCorregido) {
+  // Validar longitud mínima de dirección (al menos 10 caracteres)
   const validation = validateText(text, 10, 500);
   
   if (!validation.isValid) {
     await WhatsappService.sendText(numeroCorregido, 
-      `❌ ${validation.error}. Por favor, escribe tu dirección completa (calle, número, colonia, CP, ciudad).`);
+      `❌ ${validation.error}.\n\n` +
+      '📍 Por favor, escribe tu dirección completa (mínimo 10 caracteres).\n' +
+      'Incluye: calle, número, colonia\n\n' +
+      'Ejemplo: Av. Juárez 123, Col. Centro'
+    );
+    logger.warn('⚠️  Dirección inválida de %s: %s', from, validation.error);
+    return;
+  }
+  
+  // Validar que la dirección tenga al menos un número (número de calle)
+  if (!/\d/.test(validation.sanitized)) {
+    await WhatsappService.sendText(numeroCorregido,
+      '❌ La dirección debe incluir un número de casa/edificio.\n\n' +
+      '📍 Ejemplo: Av. Juárez 123, Col. Centro'
+    );
+    logger.warn('⚠️  Dirección sin número de %s', from);
+    return;
+  }
+  
+  // Validar que tenga letras (nombre de calle/colonia)
+  if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]{3,}/.test(validation.sanitized)) {
+    await WhatsappService.sendText(numeroCorregido,
+      '❌ La dirección debe incluir el nombre de la calle o colonia.\n\n' +
+      '📍 Ejemplo: Av. Juárez 123, Col. Centro'
+    );
+    logger.warn('⚠️  Dirección sin nombre de calle de %s', from);
     return;
   }
   
@@ -147,6 +214,17 @@ export async function handleAskAddressState(from, text, session, numeroCorregido
  */
 export async function handleTakingOrderState(from, text, buttonId, session, numeroCorregido) {
   if (buttonId) {
+    // Validar que sea un botón esperado para este estado
+    const validButtons = ['AGREGAR_MAS', 'CONFIRMAR_PEDIDO'];
+    
+    if (!validButtons.includes(buttonId)) {
+      await WhatsappService.sendText(numeroCorregido,
+        '❌ Esa opción no es válida ahora. Escribe los productos de tu pedido o usa los botones disponibles.'
+      );
+      logger.warn('⚠️  Botón no válido en TAKING_ORDER de %s: %s', from, buttonId);
+      return { shouldHandleButton: false };
+    }
+    
     return { shouldHandleButton: true };
   }
   
@@ -196,10 +274,30 @@ export async function handleTakingOrderState(from, text, buttonId, session, nume
  */
 export async function handleAwaitingConfirmState(from, buttonId, session, numeroCorregido) {
   if (buttonId) {
+    // Validar que sea un botón esperado
+    const validButtons = ['CONFIRMAR_PEDIDO', 'AGREGAR_MAS', 'CONFIRMAR_DIRECCION', 'CORREGIR_DIRECCION'];
+    
+    if (!validButtons.includes(buttonId)) {
+      await WhatsappService.sendText(numeroCorregido,
+        '❌ Esa opción no es válida en este momento. Por favor, usa los botones del pedido.'
+      );
+      logger.warn('⚠️  Botón no válido en AWAITING_CONFIRM de %s: %s', from, buttonId);
+      return { shouldHandleButton: false };
+    }
+    
     return { shouldHandleButton: true };
   }
   
-  // Si no presionó un botón, no hacer nada
-  logger.info('⏳ Esperando confirmación de botón para %s', from);
+  // Si escribió texto en lugar de usar botones
+  const buf = JSON.parse(session.Buffer || '{"pedido": ""}');
+  await WhatsappService.sendText(numeroCorregido,
+    '⚠️  Por favor, usa los botones para confirmar tu pedido o agregar más productos.\n\n' +
+    'Tu pedido actual:\n' + buf.pedido
+  );
+  
+  // Reenviar opciones
+  await WhatsappService.sendOrderOptions(numeroCorregido, buf.pedido);
+  
+  logger.info('⏳ Usuario envió texto en lugar de botón en AWAITING_CONFIRM: %s', from);
   return { shouldHandleButton: false };
 }
