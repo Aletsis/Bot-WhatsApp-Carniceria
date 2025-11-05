@@ -42,10 +42,6 @@ const webhookLimiter = rateLimit({
   message: { error: 'Too many webhook requests' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    // Usar IP del cliente o un identificador del webhook
-    return req.ip || req.headers['x-forwarded-for'] || 'unknown';
-  },
   handler: (req, res) => {
     logger.warn('🚨 Webhook rate limit excedido desde: %s', req.ip);
     res.status(429).json({ error: 'Too many webhook requests' });
@@ -90,7 +86,9 @@ process.on('unhandledRejection', (reason) => {
 });
 
 process.on('uncaughtException', err => {
-  logger.error('[uncaughtException] Error no capturado:', err);
+  console.error('[uncaughtException] Error completo:', err);
+  logger.error('[uncaughtException] Error no capturado:', err.message);
+  logger.error('[uncaughtException] Stack:', err.stack);
   gracefulShutdown({ server, pool: getPoolInstance() });
 });
 

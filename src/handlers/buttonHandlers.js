@@ -1,0 +1,167 @@
+import WhatsappService from '../services/whatsappService.js';
+import SessionService from '../services/sessionService.js';
+import DBService from '../services/dbService.js';
+import logger from '../logger.js';
+
+/**
+ * Maneja todos los botones interactivos
+ */
+export async function handleButton(from, buttonId, session, numeroCorregido) {
+  const cliente = await DBService.getClienteByPhone(from);
+  
+  switch (buttonId) {
+    case 'BTN_HACER_PEDIDO':
+      await handleMakePedidoButton(from, numeroCorregido, cliente);
+      break;
+      
+    case 'AGREGAR_MAS':
+      await handleAgregarMasButton(from, numeroCorregido);
+      break;
+      
+    case 'CONFIRMAR_PEDIDO':
+      await handleConfirmarPedidoButton(from, numeroCorregido, cliente);
+      break;
+      
+    case 'CONFIRMAR_DIRECCION':
+      await handleConfirmarDireccionButton(from, session, numeroCorregido, cliente);
+      break;
+      
+    case 'CORREGIR_DIRECCION':
+      await handleCorregirDireccionButton(from, numeroCorregido);
+      break;
+      
+    case 'BTN_ESTATUS_PEDIDO':
+      await handleEstatusPedidoButton(from, numeroCorregido);
+      break;
+      
+    case 'BTN_INFORMACION':
+      await handleInformacionButton(numeroCorregido);
+      break;
+      
+    case 'DIRECCION':
+      await handleDireccionButton(numeroCorregido);
+      break;
+      
+    case 'TELEFONOS':
+      await handleTelefonosButton(numeroCorregido);
+      break;
+      
+    case 'HORARIOS':
+      await handleHorariosButton(numeroCorregido);
+      break;
+      
+    default:
+      logger.warn('⚠️  Botón no reconocido: %s', buttonId);
+      await WhatsappService.sendText(numeroCorregido, 
+        'No reconocí esa opción. Escribe "menu" para ver las opciones disponibles.');
+  }
+}
+
+async function handleMakePedidoButton(from, numeroCorregido, cliente) {
+  if (!cliente) {
+    await WhatsappService.sendNameRequest(numeroCorregido);
+    await SessionService.updateSession(from, { Estado: 'ASK_NAME' });
+  } else {
+    await WhatsappService.sendOrderRequest(numeroCorregido);
+    await SessionService.updateSession(from, { 
+      Estado: 'TAKING_ORDER', 
+      Buffer: JSON.stringify({ pedido: '' }) 
+    });
+  }
+  logger.info('🛒 Iniciando proceso de pedido para %s', from);
+}
+
+async function handleAgregarMasButton(from, numeroCorregido) {
+  await WhatsappService.sendMoreProducts(numeroCorregido);
+  await SessionService.updateSession(from, { Estado: 'TAKING_ORDER' });
+  logger.info('➕ Usuario agregando más productos: %s', from);
+}
+
+async function handleConfirmarPedidoButton(from, numeroCorregido, cliente) {
+  // Validar que cliente existe
+  if (!cliente) {
+    logger.warn('⚠️  Cliente no encontrado al confirmar pedido: %s', from);
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ Lo siento, no encontré tu información. Por favor, escribe "reiniciar" para comenzar de nuevo.');
+    await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
+    return;
+  }
+  
+  // Validar que tenga dirección
+  if (!cliente.Direccion) {
+    await WhatsappService.sendText(numeroCorregido, 
+      '📍 Primero necesito tu dirección de entrega.');
+    await WhatsappService.sendAddressRequest(numeroCorregido);
+    await SessionService.updateSession(from, { Estado: 'ASK_ADDRESS' });
+    return;
+  }
+  
+  await WhatsappService.sendAddressConfirmation(numeroCorregido, cliente.Direccion);
+  await SessionService.updateSession(from, { Estado: 'AWAITING_CONFIRM' });
+  logger.info('✅ Solicitando confirmación de dirección: %s', from);
+}
+
+async function handleConfirmarDireccionButton(from, session, numeroCorregido, cliente) {
+  // Validar cliente
+  if (!cliente) {
+    logger.error('❌ Cliente no encontrado al confirmar dirección: %s', from);
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ Ocurrió un error. Por favor, reinicia el proceso escribiendo "menu".');
+    await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
+    return;
+  }
+  
+  const buf = JSON.parse(session.Buffer || '{"pedido": ""}');
+  
+  // Validar que haya pedido
+  if (!buf.pedido || buf.pedido.trim() === "") {
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ No hay productos en tu pedido. Escribe "menu" para empezar de nuevo.');
+    await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
+    return;
+  }
+  
+  // Crear pedido
+  const folio = DBService.generateFolio();
+  await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
+  await WhatsappService.sendOrderConfirmation(numeroCorregido, folio);
+  await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
+  
+  logger.info('✅ Pedido confirmado - Folio: %s | Cliente: %s', folio, cliente.Nombre);
+}
+
+async function handleCorregirDireccionButton(from, numeroCorregido) {
+  await WhatsappService.sendAddressUpdate(numeroCorregido);
+  await SessionService.updateSession(from, { Estado: 'ASK_ADDRESS' });
+  logger.info('📝 Usuario corrigiendo dirección: %s', from);
+}
+
+async function handleEstatusPedidoButton(from, numeroCorregido) {
+  await WhatsappService.sendFindingLastOrderStatus(numeroCorregido);
+  await WhatsappService.sendLastOrderStatus(numeroCorregido, from);
+  await WhatsappService.sendAlternativeMenu(numeroCorregido);
+  logger.info('📊 Consultando estado de pedido: %s', from);
+}
+
+async function handleInformacionButton(numeroCorregido) {
+  await WhatsappService.sendInformationOptions(numeroCorregido);
+  logger.info('ℹ️  Mostrando opciones de información');
+}
+
+async function handleDireccionButton(numeroCorregido) {
+  await WhatsappService.sendBranchAddress(numeroCorregido);
+  await WhatsappService.sendAlternativeMenu(numeroCorregido);
+  logger.info('📍 Información de dirección enviada');
+}
+
+async function handleTelefonosButton(numeroCorregido) {
+  await WhatsappService.sendPhoneNumbers(numeroCorregido);
+  await WhatsappService.sendAlternativeMenu(numeroCorregido);
+  logger.info('📞 Información de teléfonos enviada');
+}
+
+async function handleHorariosButton(numeroCorregido) {
+  await WhatsappService.sendOpeningHours(numeroCorregido);
+  await WhatsappService.sendAlternativeMenu(numeroCorregido);
+  logger.info('🕐 Información de horarios enviada');
+}
