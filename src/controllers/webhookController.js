@@ -1,6 +1,7 @@
 import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import DBService from '../services/dbService.js';
+import { clearSessionTimeout, resetSessionTimeout } from '../services/sessionTimeoutService.js';
 import logger from '../logger.js';
 import { handleButton } from '../handlers/buttonHandlers.js';
 import {
@@ -48,6 +49,9 @@ export async function messageWebhookHandler(req, res) {
     // Comando global para cancelar/reiniciar
     const textLower = text.trim().toLowerCase();
     if (['cancelar', 'reiniciar', 'salir', 'menu', 'inicio'].includes(textLower)) {
+      // Limpiar timeout al reiniciar
+      clearSessionTimeout(from);
+      
       await SessionService.updateSession(from, { Estado: 'START', Buffer: null, NombreTemporal: null });
       await WhatsappService.sendText(numeroCorregido, '🔄 Proceso cancelado. Volvamos al inicio.');
       
@@ -63,9 +67,10 @@ export async function messageWebhookHandler(req, res) {
     }
 
     const session = await SessionService.getOrCreateSession(from);
-    logger.info('Sesión actual para %s: %o', from, session);
-    logger.info('Estado de sesión: %s', session.Estado);
-    logger.info('Llamando a handleBySessionState...');
+    
+    // Reiniciar timeout cada vez que el usuario interactúa
+    resetSessionTimeout(from, session.Estado);
+    
     await handleBySessionState(from, text, session, numeroCorregido, buttonId);
     
     return res.sendStatus(200);

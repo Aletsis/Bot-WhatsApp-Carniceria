@@ -1,6 +1,7 @@
 import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import DBService from '../services/dbService.js';
+import { startSessionTimeout, clearSessionTimeout } from '../services/sessionTimeoutService.js';
 import logger from '../logger.js';
 
 /**
@@ -61,12 +62,14 @@ async function handleMakePedidoButton(from, numeroCorregido, cliente) {
   if (!cliente) {
     await WhatsappService.sendNameRequest(numeroCorregido);
     await SessionService.updateSession(from, { Estado: 'ASK_NAME' });
+    startSessionTimeout(from, 'ASK_NAME');
   } else {
     await WhatsappService.sendOrderRequest(numeroCorregido);
     await SessionService.updateSession(from, { 
       Estado: 'TAKING_ORDER', 
       Buffer: JSON.stringify({ pedido: '' }) 
     });
+    startSessionTimeout(from, 'TAKING_ORDER');
   }
   logger.info('🛒 Iniciando proceso de pedido para %s', from);
 }
@@ -74,6 +77,7 @@ async function handleMakePedidoButton(from, numeroCorregido, cliente) {
 async function handleAgregarMasButton(from, numeroCorregido) {
   await WhatsappService.sendMoreProducts(numeroCorregido);
   await SessionService.updateSession(from, { Estado: 'TAKING_ORDER' });
+  startSessionTimeout(from, 'TAKING_ORDER');
   logger.info('➕ Usuario agregando más productos: %s', from);
 }
 
@@ -93,11 +97,13 @@ async function handleConfirmarPedidoButton(from, numeroCorregido, cliente) {
       '📍 Primero necesito tu dirección de entrega.');
     await WhatsappService.sendAddressRequest(numeroCorregido);
     await SessionService.updateSession(from, { Estado: 'ASK_ADDRESS' });
+    startSessionTimeout(from, 'ASK_ADDRESS');
     return;
   }
   
   await WhatsappService.sendAddressConfirmation(numeroCorregido, cliente.Direccion);
   await SessionService.updateSession(from, { Estado: 'AWAITING_CONFIRM' });
+  startSessionTimeout(from, 'AWAITING_CONFIRM');
   logger.info('✅ Solicitando confirmación de dirección: %s', from);
 }
 
@@ -126,6 +132,7 @@ async function handleConfirmarDireccionButton(from, session, numeroCorregido, cl
   await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
   await WhatsappService.sendOrderConfirmation(numeroCorregido, folio);
   await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
+  clearSessionTimeout(from); // Pedido completado, limpiar timeout
   
   logger.info('✅ Pedido confirmado - Folio: %s | Cliente: %s', folio, cliente.Nombre);
 }
@@ -133,6 +140,7 @@ async function handleConfirmarDireccionButton(from, session, numeroCorregido, cl
 async function handleCorregirDireccionButton(from, numeroCorregido) {
   await WhatsappService.sendAddressUpdate(numeroCorregido);
   await SessionService.updateSession(from, { Estado: 'ASK_ADDRESS' });
+  startSessionTimeout(from, 'ASK_ADDRESS');
   logger.info('📝 Usuario corrigiendo dirección: %s', from);
 }
 

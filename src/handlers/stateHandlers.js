@@ -1,6 +1,7 @@
 import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import DBService from '../services/dbService.js';
+import { startSessionTimeout } from '../services/sessionTimeoutService.js';
 import logger from '../logger.js';
 import { validateText } from '../utils/validators.js';
 
@@ -18,6 +19,7 @@ export async function handleStartState(from, numeroCorregido) {
   
   await WhatsappService.sendMainMenu(numeroCorregido);
   await SessionService.updateSession(from, { Estado: 'MENU' });
+  startSessionTimeout(from, 'MENU');
   
   logger.info('✅ Estado START procesado para %s', from);
 }
@@ -39,9 +41,11 @@ export async function handleMenuState(from, text, buttonId, session, numeroCorre
     if (!cliente) {
       await WhatsappService.sendNameRequest(numeroCorregido);
       await SessionService.updateSession(from, { Estado: 'ASK_NAME' });
+      startSessionTimeout(from, 'ASK_NAME');
     } else {
       await WhatsappService.sendOrderRequest(numeroCorregido);
       await SessionService.updateSession(from, { Estado: 'TAKING_ORDER', Buffer: JSON.stringify({ pedido: '' }) });
+      startSessionTimeout(from, 'TAKING_ORDER');
     }
     return { shouldHandleButton: false };
   }
@@ -72,6 +76,7 @@ export async function handleAskNameState(from, text, numeroCorregido) {
     NombreTemporal: validation.sanitized, 
     Estado: 'ASK_ADDRESS' 
   });
+  startSessionTimeout(from, 'ASK_ADDRESS');
   
   await WhatsappService.sendAddressRequest(numeroCorregido);
   logger.info('✅ Nombre capturado para %s: %s', from, validation.sanitized);
@@ -107,6 +112,7 @@ export async function handleAskAddressState(from, text, session, numeroCorregido
       NombreTemporal: null,
       Buffer: JSON.stringify({ pedido: '' })
     });
+    startSessionTimeout(from, 'TAKING_ORDER');
     
     logger.info('✅ Cliente nuevo registrado: %s - %s', from, session.NombreTemporal);
   } else {
@@ -123,6 +129,7 @@ export async function handleAskAddressState(from, text, session, numeroCorregido
         Estado: 'TAKING_ORDER',
         Buffer: JSON.stringify({ pedido: '' })
       });
+      startSessionTimeout(from, 'TAKING_ORDER');
     } else {
       // Ya tenía un pedido en buffer, confirmar
       const folio = DBService.generateFolio();
@@ -158,6 +165,7 @@ export async function handleTakingOrderState(from, text, buttonId, session, nume
     
     await WhatsappService.sendOrderOptions(numeroCorregido, buf.pedido);
     await SessionService.updateSession(from, { Estado: 'AWAITING_CONFIRM' });
+    startSessionTimeout(from, 'AWAITING_CONFIRM');
     
     logger.info('📋 Pedido listo para confirmar: %s', from);
     return { shouldHandleButton: false };
