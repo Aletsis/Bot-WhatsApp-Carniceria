@@ -4,6 +4,7 @@ import * as userService from '../services/userService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 import { printTicket, isPrintingEnabled } from '../services/printingService.js';
+import { updatePedidoEstadoWithVersion } from '../services/transactionService.js';
 
 /**
  * Verifica si el usuario está autenticado
@@ -161,24 +162,64 @@ export async function updateEstadoPedido(req, res) {
       });
     }
     
-    const pool = await getPool();
-    const result = await pool.request()
-      .input('pedidoId', sql.Int, parseInt(pedidoId))
-      .input('estado', sql.NVarChar, estadoFinal)
-      .input('notas', sql.NVarChar, notas || null)
-      .query(`UPDATE Pedidos 
-              SET Estado = @estado, Notas = @notas 
-              WHERE PedidoID = @pedidoId`);
+    // 🔄 RETRY LOOP con optimistic locking (máximo 3 intentos)
+    const MAX_RETRIES = 3;
+    let attempt = 0;
     
-    if (result.rowsAffected[0] === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Pedido no encontrado' 
-      });
+    while (attempt < MAX_RETRIES) {
+      attempt++;
+      
+      // Obtener pedido actual CON VERSION
+      const pool = await getPool();
+      const pedidoResult = await pool.request()
+        .input('pedidoId', sql.Int, parseInt(pedidoId))
+        .query('SELECT PedidoID, Estado, Version FROM Pedidos WHERE PedidoID = @pedidoId');
+      
+      if (pedidoResult.recordset.length === 0) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Pedido no encontrado' 
+        });
+      }
+      
+      const currentVersion = pedidoResult.recordset[0].Version || 0;
+      
+      // 🔐 ACTUALIZACIÓN CON OPTIMISTIC LOCKING
+      const success = await updatePedidoEstadoWithVersion(
+        parseInt(pedidoId), 
+        estadoFinal, 
+        currentVersion,
+        notas
+      );
+      
+      if (success) {
+        logger.info('✅ Estado actualizado (intento %d/%d): Pedido %s → %s', attempt, MAX_RETRIES, pedidoId, estadoFinal);
+        return res.json({ success: true, message: 'Estado actualizado correctamente' });
+      } else {
+        // Conflicto de versión - otro proceso modificó el pedido
+        logger.warn('⚠️ Conflicto de versión en intento %d/%d para pedido: %s (esperado v%d)', 
+                   attempt, MAX_RETRIES, pedidoId, currentVersion);
+        
+        if (attempt >= MAX_RETRIES) {
+          logger.error('🚨 FALLO después de %d intentos - conflicto de concurrencia: pedido %s', MAX_RETRIES, pedidoId);
+          return res.status(409).json({ 
+            success: false, 
+            error: `Conflicto de concurrencia. El pedido fue modificado por otro usuario. Por favor, recargue e intente de nuevo.` 
+          });
+        }
+        
+        // Esperar un poco antes de reintentar (backoff exponencial)
+        const delay = Math.pow(2, attempt - 1) * 100; // 100ms, 200ms, 400ms
+        await new Promise(resolve => setTimeout(resolve, delay));
+        // Continuar al siguiente intento del loop
+      }
     }
     
-    logger.info('✅ Estado actualizado: Pedido %s → %s', pedidoId, estadoFinal);
-    res.json({ success: true, message: 'Estado actualizado correctamente' });
+    // No debería llegar aquí, pero por seguridad
+    return res.status(500).json({ 
+      success: false, 
+      error: `Fallo al actualizar pedido después de ${MAX_RETRIES} intentos` 
+    });
   } catch (err) {
     logger.error('❌ Error actualizando estado del pedido %s:', req.params.pedidoId, err.message);
     res.status(500).json({ success: false, error: err.message });
@@ -402,25 +443,65 @@ export async function updateEstadoPedidoNuevo(req, res) {
       });
     }
     
-    const pool = await getPool();
-    const result = await pool.request()
-      .input('pedidoId', sql.Int, parseInt(pedidoId))
-      .input('estado', sql.NVarChar, estadoRecibido)
-      .query(`UPDATE Pedidos 
-              SET Estado = @estado 
-              WHERE PedidoID = @pedidoId`);
+    // 🔄 RETRY LOOP con optimistic locking (máximo 3 intentos)
+    const MAX_RETRIES = 3;
+    let attempt = 0;
     
-    if (result.rowsAffected[0] === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'Pedido no encontrado' 
-      });
+    while (attempt < MAX_RETRIES) {
+      attempt++;
+      
+      // Obtener pedido actual CON VERSION
+      const pool = await getPool();
+      const pedidoResult = await pool.request()
+        .input('pedidoId', sql.Int, parseInt(pedidoId))
+        .query('SELECT PedidoID, Estado, Version FROM Pedidos WHERE PedidoID = @pedidoId');
+      
+      if (pedidoResult.recordset.length === 0) {
+        return res.status(404).json({ 
+          success: false, 
+          error: 'Pedido no encontrado' 
+        });
+      }
+      
+      const currentVersion = pedidoResult.recordset[0].Version || 0;
+      
+      // 🔐 ACTUALIZACIÓN CON OPTIMISTIC LOCKING (sin notas)
+      const success = await updatePedidoEstadoWithVersion(
+        parseInt(pedidoId), 
+        estadoRecibido, 
+        currentVersion
+      );
+      
+      if (success) {
+        logger.info('✅ Estado actualizado (intento %d/%d): Pedido %s → %s', attempt, MAX_RETRIES, pedidoId, estadoRecibido);
+        return res.json({ 
+          success: true, 
+          message: 'Estado actualizado correctamente'
+        });
+      } else {
+        // Conflicto de versión - otro proceso modificó el pedido
+        logger.warn('⚠️ Conflicto de versión en intento %d/%d para pedido: %s (esperado v%d)', 
+                   attempt, MAX_RETRIES, pedidoId, currentVersion);
+        
+        if (attempt >= MAX_RETRIES) {
+          logger.error('🚨 FALLO después de %d intentos - conflicto de concurrencia: pedido %s', MAX_RETRIES, pedidoId);
+          return res.status(409).json({ 
+            success: false, 
+            error: `Conflicto de concurrencia. El pedido fue modificado por otro usuario. Por favor, recargue e intente de nuevo.` 
+          });
+        }
+        
+        // Esperar un poco antes de reintentar (backoff exponencial)
+        const delay = Math.pow(2, attempt - 1) * 100; // 100ms, 200ms, 400ms
+        await new Promise(resolve => setTimeout(resolve, delay));
+        // Continuar al siguiente intento del loop
+      }
     }
     
-    logger.info('✅ Estado actualizado: Pedido %s → %s', pedidoId, estadoRecibido);
-    res.json({ 
-      success: true, 
-      message: 'Estado actualizado correctamente'
+    // No debería llegar aquí, pero por seguridad
+    return res.status(500).json({ 
+      success: false, 
+      error: `Fallo al actualizar pedido después de ${MAX_RETRIES} intentos` 
     });
   } catch (err) {
     logger.error('❌ Error actualizando estado del pedido %s:', req.params.pedidoId, err.message);

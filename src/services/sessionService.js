@@ -6,6 +6,7 @@ import {
   isCriticalState, 
   getTransitionError 
 } from '../config/stateTransitions.js';
+import { updateSessionWithVersion } from './transactionService.js';
 
 
 // Sessions are persisted in table Conversaciones
@@ -52,61 +53,92 @@ export default {
      * @param {string} [updates.Buffer] - Nuevo buffer
      * @param {string} [updates.NombreTemporal] - Nombre temporal
      * @returns {Promise<boolean>}
-     * @throws {Error} Si hay un error de conexión o consulta a BD
+     * @throws {Error} Si hay un error de conexión, consulta a BD, o conflicto de concurrencia
      */
     updateSession: async (telefono, updates) => {
         const pool = await getPool();
         
-        // Obtener sesión actual
-        const sel = await pool.request()
-            .input('telefono', sql.NVarChar, telefono)
-            .query('SELECT * FROM Conversaciones WHERE NumeroTelefono = @telefono');
+        // 🔄 RETRY LOOP con optimistic locking (máximo 3 intentos)
+        const MAX_RETRIES = 3;
+        let attempt = 0;
         
-        const row = sel.recordset[0];
-        if (!row) {
-          logger.warn('⚠️ No se encontró sesión para actualizar: %s', telefono);
-          throw new Error(`No se encontró sesión para: ${telefono}`);
-        }
-        
-        // Preparar valores
-        const currentState = row.Estado || 'START';
-        const newEstado = updates.Estado || currentState;
-        const nombreTemporal = updates.NombreTemporal !== undefined ? updates.NombreTemporal : row.NombreTemporal;
-        let newBuffer = row.Buffer || null;
-        if (updates.Buffer !== undefined) newBuffer = updates.Buffer;
-        
-        // 🔒 VALIDACIÓN DE TRANSICIÓN DE ESTADO
-        if (updates.Estado && currentState !== newEstado) {
-          const isValid = isValidTransition(currentState, newEstado);
+        while (attempt < MAX_RETRIES) {
+          attempt++;
           
-          if (!isValid) {
-            // Transición inválida detectada
-            const errorMsg = getTransitionError(currentState, newEstado);
+          // Obtener sesión actual CON VERSION
+          const sel = await pool.request()
+              .input('telefono', sql.NVarChar, telefono)
+              .query('SELECT * FROM Conversaciones WHERE NumeroTelefono = @telefono');
+          
+          const row = sel.recordset[0];
+          if (!row) {
+            logger.warn('⚠️ No se encontró sesión para actualizar: %s', telefono);
+            throw new Error(`No se encontró sesión para: ${telefono}`);
+          }
+          
+          const currentVersion = row.Version || 0;
+          
+          // Preparar valores
+          const currentState = row.Estado || 'START';
+          const newEstado = updates.Estado || currentState;
+          const nombreTemporal = updates.NombreTemporal !== undefined ? updates.NombreTemporal : row.NombreTemporal;
+          let newBuffer = row.Buffer || null;
+          if (updates.Buffer !== undefined) newBuffer = updates.Buffer;
+          
+          // 🔒 VALIDACIÓN DE TRANSICIÓN DE ESTADO
+          if (updates.Estado && currentState !== newEstado) {
+            const isValid = isValidTransition(currentState, newEstado);
             
-            // Si es un estado crítico, loggear como ERROR (posible bug serio)
-            if (isCriticalState(currentState) || isCriticalState(newEstado)) {
-              logger.error('🚨 TRANSICIÓN CRÍTICA INVÁLIDA: %s (tel: %s)', errorMsg, telefono);
+            if (!isValid) {
+              // Transición inválida detectada
+              const errorMsg = getTransitionError(currentState, newEstado);
+              
+              // Si es un estado crítico, loggear como ERROR (posible bug serio)
+              if (isCriticalState(currentState) || isCriticalState(newEstado)) {
+                logger.error('🚨 TRANSICIÓN CRÍTICA INVÁLIDA: %s (tel: %s)', errorMsg, telefono);
+              } else {
+                logger.warn('⚠️ Transición inválida: %s (tel: %s)', errorMsg, telefono);
+              }
+              
+              // ⚠️ IMPORTANTE: Por ahora solo loggeamos, NO bloqueamos
+              // En futuras versiones se puede cambiar a throw Error para bloquear
+              // throw new Error(errorMsg);
             } else {
-              logger.warn('⚠️ Transición inválida: %s (tel: %s)', errorMsg, telefono);
+              // Transición válida
+              logger.debug('✅ Transición válida: %s → %s (tel: %s)', currentState, newEstado, telefono);
+            }
+          }
+          
+          // 🔐 ACTUALIZACIÓN CON OPTIMISTIC LOCKING
+          const sessionUpdates = {
+            Estado: newEstado,
+            Buffer: newBuffer,
+            NombreTemporal: nombreTemporal
+          };
+          
+          const success = await updateSessionWithVersion(telefono, sessionUpdates, currentVersion);
+          
+          if (success) {
+            logger.debug('✅ Sesión actualizada (intento %d/%d): %s - Estado: %s', attempt, MAX_RETRIES, telefono, newEstado);
+            return true;
+          } else {
+            // Conflicto de versión - otro proceso modificó la sesión
+            logger.warn('⚠️ Conflicto de versión en intento %d/%d para: %s (esperado v%d)', 
+                       attempt, MAX_RETRIES, telefono, currentVersion);
+            
+            if (attempt >= MAX_RETRIES) {
+              logger.error('🚨 FALLO después de %d intentos - conflicto de concurrencia: %s', MAX_RETRIES, telefono);
+              throw new Error(`Conflicto de concurrencia después de ${MAX_RETRIES} intentos para: ${telefono}`);
             }
             
-            // ⚠️ IMPORTANTE: Por ahora solo loggeamos, NO bloqueamos
-            // En futuras versiones se puede cambiar a throw Error para bloquear
-            // throw new Error(errorMsg);
-          } else {
-            // Transición válida
-            logger.debug('✅ Transición válida: %s → %s (tel: %s)', currentState, newEstado, telefono);
+            // Esperar un poco antes de reintentar (backoff exponencial)
+            const delay = Math.pow(2, attempt - 1) * 100; // 100ms, 200ms, 400ms
+            await new Promise(resolve => setTimeout(resolve, delay));
+            // Continuar al siguiente intento del loop
           }
         }
-
-        await pool.request()
-          .input('telefono', sql.NVarChar, telefono)
-          .input('estado', sql.NVarChar, newEstado)
-          .input('buffer', sql.NVarChar, newBuffer)
-          .input('nombretemporal', sql.NVarChar, nombreTemporal)
-          .query('UPDATE Conversaciones SET Estado=@estado, Buffer=@buffer, UltimaInteraccion=SYSDATETIME(), NombreTemporal=@nombretemporal WHERE NumeroTelefono=@telefono');
-
-        logger.debug('✅ Sesión actualizada: %s - Estado: %s', telefono, newEstado);
-        return true;
+        
+        // No debería llegar aquí, pero por seguridad
+        throw new Error(`Fallo al actualizar sesión después de ${MAX_RETRIES} intentos: ${telefono}`);
     }
 };
