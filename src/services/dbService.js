@@ -131,30 +131,6 @@ export default {
   },
 
   /**
-   * Inserta el detalle de un pedido (productos individuales)
-   * @param {number} pedidoId - ID del pedido
-   * @param {Object} item - Item del pedido
-   * @param {string} item.producto - Nombre del producto
-   * @param {number} item.cantidad - Cantidad
-   * @param {string} item.unidad - Unidad de medida
-   * @param {string} [item.observaciones] - Observaciones opcionales
-   * @returns {Promise<void>}
-   * @throws {Error} Si hay un error de conexión o consulta a BD
-   */
-  insertDetallePedido: async (pedidoId, item) => {
-    const pool = await getPool();
-    await pool.request()
-      .input('PedidoID', sql.BigInt, pedidoId)
-      .input('Producto', sql.NVarChar, item.producto)
-      .input('Cantidad', sql.Decimal(10,3), item.cantidad)
-      .input('Unidad', sql.NVarChar, item.unidad)
-      .input('Observaciones', sql.NVarChar, item.observaciones || null)
-      .query('INSERT INTO DetallePedidos (PedidoID,Producto,Cantidad,Unidad,Observaciones) VALUES (@PedidoID,@Producto,@Cantidad,@Unidad,@Observaciones)');
-    
-    logger.debug('Detalle de pedido insertado: PedidoID=%d, Producto=%s', pedidoId, item.producto);
-  },
-
-  /**
    * Obtiene el último pedido de un cliente por su número de teléfono
    * @param {string} telefono - Número de teléfono del cliente
    * @returns {Promise<Object|null>} Último pedido o null si no tiene pedidos
