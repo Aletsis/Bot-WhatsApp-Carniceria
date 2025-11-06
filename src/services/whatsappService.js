@@ -18,14 +18,47 @@ assertEnv();
 async function apiSend(payload) {
     const to = payload.to;
     if (!to) throw new Error('apiSend: parámetro "to" es requerido');
+    
     try {
         const res = await axios.post(API_BASE(PHONE_ID), payload, {
-        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }
+          headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }
         });
-        logger.info('✅ Mensaje enviado', res.data);
+        
+        // Validar respuesta de WhatsApp
+        if (!res.data || !res.data.messages) {
+          logger.warn('⚠️ Respuesta inesperada de WhatsApp API: %o', res.data);
+        } else {
+          logger.info('✅ Mensaje enviado a %s - ID: %s', to, res.data.messages[0]?.id);
+        }
+        
         return res.data;
     } catch (err) {
-        logger.error('whatsapp send error', err.response?.data || err.message || err);
+        // Distinguir tipos de error
+        if (err.response) {
+          // Error de respuesta de WhatsApp API
+          const status = err.response.status;
+          const errorData = err.response.data;
+          
+          logger.error('❌ Error de WhatsApp API (%d) para %s: %o', status, to, errorData);
+          
+          // Errores comunes
+          if (status === 401) {
+            logger.error('🔑 Token de WhatsApp inválido o expirado');
+          } else if (status === 404) {
+            logger.error('📞 Número de teléfono no válido o Phone Number ID incorrecto: %s', to);
+          } else if (status === 429) {
+            logger.error('🚦 Rate limit excedido en WhatsApp API');
+          } else if (status >= 500) {
+            logger.error('🔥 Error del servidor de WhatsApp');
+          }
+        } else if (err.request) {
+          // Request enviado pero no hay respuesta
+          logger.error('❌ Sin respuesta de WhatsApp API para %s: %s', to, err.message);
+        } else {
+          // Error al configurar el request
+          logger.error('❌ Error configurando request para %s: %s', to, err.message);
+        }
+        
         throw err;
     }
 }

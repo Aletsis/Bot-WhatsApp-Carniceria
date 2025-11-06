@@ -49,21 +49,27 @@ export async function messageWebhookHandler(req, res) {
     // Comando global para cancelar/reiniciar
     const textLower = text.trim().toLowerCase();
     if (['cancelar', 'reiniciar', 'salir', 'menu', 'inicio'].includes(textLower)) {
-      // Limpiar timeout al reiniciar
-      clearSessionTimeout(from);
-      
-      await SessionService.updateSession(from, { Estado: 'START', Buffer: null, NombreTemporal: null });
-      await WhatsappService.sendText(numeroCorregido, '🔄 Proceso cancelado. Volvamos al inicio.');
-      
-      const cliente = await DBService.getClienteByPhone(from);
-      if (cliente) {
-        await WhatsappService.sendPersonalizedGreeting(cliente.Nombre, numeroCorregido);
-      } else {
-        await WhatsappService.sendGenericGreeting(numeroCorregido);
+      try {
+        // Limpiar timeout al reiniciar
+        clearSessionTimeout(from);
+        
+        await SessionService.updateSession(from, { Estado: 'START', Buffer: null, NombreTemporal: null });
+        await WhatsappService.sendText(numeroCorregido, '🔄 Proceso cancelado. Volvamos al inicio.');
+        
+        const cliente = await DBService.getClienteByPhone(from);
+        if (cliente) {
+          await WhatsappService.sendPersonalizedGreeting(cliente.Nombre, numeroCorregido);
+        } else {
+          await WhatsappService.sendGenericGreeting(numeroCorregido);
+        }
+        await WhatsappService.sendMainMenu(numeroCorregido);
+        
+        return res.sendStatus(200);
+      } catch (err) {
+        logger.error('❌ Error en comando de reinicio: %s', err.message);
+        // Aún así, respondemos 200 para no bloquear WhatsApp
+        return res.sendStatus(200);
       }
-      await WhatsappService.sendMainMenu(numeroCorregido);
-      
-      return res.sendStatus(200);
     }
 
     const session = await SessionService.getOrCreateSession(from);
@@ -76,7 +82,21 @@ export async function messageWebhookHandler(req, res) {
     return res.sendStatus(200);
   } catch (err) {
     logger.error('❌ Error al procesar mensaje:', err.message, err.stack);
-    return res.status(500).send({ error: 'Internal server error' });
+    
+    // Intentar enviar mensaje de error al usuario
+    try {
+      const numeroCorregido = req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+      if (numeroCorregido) {
+        const num = numeroCorregido.slice(0, 2) + numeroCorregido.slice(3);
+        await WhatsappService.sendText(num, 
+          '❌ Lo siento, ocurrió un error técnico. Por favor, intenta de nuevo en unos momentos.');
+      }
+    } catch (notifyErr) {
+      logger.error('❌ No se pudo notificar error al usuario: %s', notifyErr.message);
+    }
+    
+    // Siempre respondemos 200 a WhatsApp para evitar reintentos
+    return res.sendStatus(200);
   }
 }
 
@@ -84,43 +104,58 @@ async function handleBySessionState(from, text, session, numeroCorregido, button
     const state = session?.Estado || 'START';
     let result;
     
-    switch (state) {
-        case 'START':
-            await handleStartState(from, numeroCorregido);
-            break;
-        
-        case 'MENU':
-            result = await handleMenuState(from, text, buttonId, session, numeroCorregido);
-            if (result?.shouldHandleButton && buttonId) {
-                await handleButton(from, buttonId, session, numeroCorregido);
-            }
-            break;
-            
-        case 'ASK_NAME':
-            await handleAskNameState(from, text, numeroCorregido);
-            break;
-            
-        case 'ASK_ADDRESS':
-            await handleAskAddressState(from, text, session, numeroCorregido);
-            break;
-            
-        case 'TAKING_ORDER':
-            result = await handleTakingOrderState(from, text, buttonId, session, numeroCorregido);
-            if (result?.shouldHandleButton && buttonId) {
-                await handleButton(from, buttonId, session, numeroCorregido);
-            }
-            break;
-            
-        case 'AWAITING_CONFIRM':
-            result = await handleAwaitingConfirmState(from, buttonId, session, numeroCorregido);
-            if (result?.shouldHandleButton && buttonId) {
-                await handleButton(from, buttonId, session, numeroCorregido);
-            }
-            break;
-            
-        default:
-            logger.warn('⚠️  Estado no reconocido: %s para %s', state, from);
-            await WhatsappService.sendText(numeroCorregido, 
-                'Algo salió mal. Escribe "reiniciar" para comenzar de nuevo.');
+    try {
+      switch (state) {
+          case 'START':
+              await handleStartState(from, numeroCorregido);
+              break;
+          
+          case 'MENU':
+              result = await handleMenuState(from, text, buttonId, session, numeroCorregido);
+              if (result?.shouldHandleButton && buttonId) {
+                  await handleButton(from, buttonId, session, numeroCorregido);
+              }
+              break;
+              
+          case 'ASK_NAME':
+              await handleAskNameState(from, text, numeroCorregido);
+              break;
+              
+          case 'ASK_ADDRESS':
+              await handleAskAddressState(from, text, session, numeroCorregido);
+              break;
+              
+          case 'TAKING_ORDER':
+              result = await handleTakingOrderState(from, text, buttonId, session, numeroCorregido);
+              if (result?.shouldHandleButton && buttonId) {
+                  await handleButton(from, buttonId, session, numeroCorregido);
+              }
+              break;
+              
+          case 'AWAITING_CONFIRM':
+              result = await handleAwaitingConfirmState(from, buttonId, session, numeroCorregido);
+              if (result?.shouldHandleButton && buttonId) {
+                  await handleButton(from, buttonId, session, numeroCorregido);
+              }
+              break;
+              
+          default:
+              logger.warn('⚠️  Estado no reconocido: %s para %s', state, from);
+              await WhatsappService.sendText(numeroCorregido, 
+                  'Algo salió mal. Escribe "reiniciar" para comenzar de nuevo.');
+      }
+    } catch (err) {
+      logger.error('❌ Error en handleBySessionState (estado: %s) para %s: %s', state, from, err.message);
+      logger.error('Stack trace:', err.stack);
+      
+      // Intentar notificar al usuario
+      try {
+        await WhatsappService.sendText(numeroCorregido, 
+          '❌ Ocurrió un error. Por favor, escribe "menu" para reintentar.');
+      } catch (notifyErr) {
+        logger.error('❌ No se pudo enviar mensaje de error: %s', notifyErr.message);
+      }
+      
+      // No propagar el error - ya fue logueado y notificado
     }
 }

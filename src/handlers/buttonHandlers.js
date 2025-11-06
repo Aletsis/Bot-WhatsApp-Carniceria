@@ -8,53 +8,60 @@ import logger from '../logger.js';
  * Maneja todos los botones interactivos
  */
 export async function handleButton(from, buttonId, session, numeroCorregido) {
-  const cliente = await DBService.getClienteByPhone(from);
-  
-  switch (buttonId) {
-    case 'BTN_HACER_PEDIDO':
-      await handleMakePedidoButton(from, numeroCorregido, cliente);
-      break;
-      
-    case 'AGREGAR_MAS':
-      await handleAgregarMasButton(from, numeroCorregido);
-      break;
-      
-    case 'CONFIRMAR_PEDIDO':
-      await handleConfirmarPedidoButton(from, numeroCorregido, cliente);
-      break;
-      
-    case 'CONFIRMAR_DIRECCION':
-      await handleConfirmarDireccionButton(from, session, numeroCorregido, cliente);
-      break;
-      
-    case 'CORREGIR_DIRECCION':
-      await handleCorregirDireccionButton(from, numeroCorregido);
-      break;
-      
-    case 'BTN_ESTATUS_PEDIDO':
-      await handleEstatusPedidoButton(from, numeroCorregido);
-      break;
-      
-    case 'BTN_INFORMACION':
-      await handleInformacionButton(numeroCorregido);
-      break;
-      
-    case 'DIRECCION':
-      await handleDireccionButton(numeroCorregido);
-      break;
-      
-    case 'TELEFONOS':
-      await handleTelefonosButton(numeroCorregido);
-      break;
-      
-    case 'HORARIOS':
-      await handleHorariosButton(numeroCorregido);
-      break;
-      
-    default:
-      logger.warn('⚠️  Botón no reconocido: %s', buttonId);
-      await WhatsappService.sendText(numeroCorregido, 
-        'No reconocí esa opción. Escribe "menu" para ver las opciones disponibles.');
+  try {
+    const cliente = await DBService.getClienteByPhone(from);
+    
+    switch (buttonId) {
+      case 'BTN_HACER_PEDIDO':
+        await handleMakePedidoButton(from, numeroCorregido, cliente);
+        break;
+        
+      case 'AGREGAR_MAS':
+        await handleAgregarMasButton(from, numeroCorregido);
+        break;
+        
+      case 'CONFIRMAR_PEDIDO':
+        await handleConfirmarPedidoButton(from, numeroCorregido, cliente);
+        break;
+        
+      case 'CONFIRMAR_DIRECCION':
+        await handleConfirmarDireccionButton(from, session, numeroCorregido, cliente);
+        break;
+        
+      case 'CORREGIR_DIRECCION':
+        await handleCorregirDireccionButton(from, numeroCorregido);
+        break;
+        
+      case 'BTN_ESTATUS_PEDIDO':
+        await handleEstatusPedidoButton(from, numeroCorregido);
+        break;
+        
+      case 'BTN_INFORMACION':
+        await handleInformacionButton(numeroCorregido);
+        break;
+        
+      case 'DIRECCION':
+        await handleDireccionButton(numeroCorregido);
+        break;
+        
+      case 'TELEFONOS':
+        await handleTelefonosButton(numeroCorregido);
+        break;
+        
+      case 'HORARIOS':
+        await handleHorariosButton(numeroCorregido);
+        break;
+        
+      default:
+        logger.warn('⚠️  Botón no reconocido: %s', buttonId);
+        await WhatsappService.sendText(numeroCorregido, 
+          'No reconocí esa opción. Escribe "menu" para ver las opciones disponibles.');
+    }
+  } catch (err) {
+    logger.error('❌ Error en handleButton (%s) para %s: %s', buttonId, from, err.message);
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ Ocurrió un error al procesar tu solicitud. Por favor, intenta de nuevo o escribe "menu".');
+    throw err;
   }
 }
 

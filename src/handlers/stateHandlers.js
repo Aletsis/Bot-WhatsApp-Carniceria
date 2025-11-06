@@ -9,71 +9,85 @@ import { validateText } from '../utils/validators.js';
  * Maneja el estado START - Saludo inicial
  */
 export async function handleStartState(from, numeroCorregido) {
-  const cliente = await DBService.getClienteByPhone(from);
-  
-  if (cliente) {
-    await WhatsappService.sendPersonalizedGreeting(cliente.Nombre, numeroCorregido);
-  } else {
-    await WhatsappService.sendGenericGreeting(numeroCorregido);
+  try {
+    const cliente = await DBService.getClienteByPhone(from);
+    
+    if (cliente) {
+      await WhatsappService.sendPersonalizedGreeting(cliente.Nombre, numeroCorregido);
+    } else {
+      await WhatsappService.sendGenericGreeting(numeroCorregido);
+    }
+    
+    await WhatsappService.sendMainMenu(numeroCorregido);
+    await SessionService.updateSession(from, { Estado: 'MENU' });
+    startSessionTimeout(from, 'MENU');
+    
+    logger.info('✅ Estado START procesado para %s', from);
+  } catch (err) {
+    logger.error('❌ Error en handleStartState para %s: %s', from, err.message);
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ Lo siento, hay un problema temporal con el servicio. Por favor, intenta de nuevo en unos momentos.');
+    throw err; // Propagar para que el controller lo maneje
   }
-  
-  await WhatsappService.sendMainMenu(numeroCorregido);
-  await SessionService.updateSession(from, { Estado: 'MENU' });
-  startSessionTimeout(from, 'MENU');
-  
-  logger.info('✅ Estado START procesado para %s', from);
 }
 
 /**
  * Maneja el estado MENU - Opciones principales
  */
 export async function handleMenuState(from, text, buttonId, session, numeroCorregido) {
-  if (buttonId) {
-    logger.info('⏳ Esperando manejo de botón para %s', from);
-    // Los botones se manejan en buttonHandlers.js
-    return { shouldHandleButton: true };
-  }
-  
-  const textLower = text.trim().toLowerCase();
-  
-  // Opciones válidas del menú
-  const validOptions = ['hacer pedido', 'estado pedido', 'informacion', 'información'];
-  
-  if (textLower === 'hacer pedido') {
-    const cliente = await DBService.getClienteByPhone(from);
-    if (!cliente) {
-      await WhatsappService.sendNameRequest(numeroCorregido);
-      await SessionService.updateSession(from, { Estado: 'ASK_NAME' });
-      startSessionTimeout(from, 'ASK_NAME');
-    } else {
-      await WhatsappService.sendOrderRequest(numeroCorregido);
-      await SessionService.updateSession(from, { Estado: 'TAKING_ORDER', Buffer: JSON.stringify({ pedido: '' }) });
-      startSessionTimeout(from, 'TAKING_ORDER');
+  try {
+    if (buttonId) {
+      logger.info('⏳ Esperando manejo de botón para %s', from);
+      // Los botones se manejan en buttonHandlers.js
+      return { shouldHandleButton: true };
     }
+    
+    const textLower = text.trim().toLowerCase();
+    
+    // Opciones válidas del menú
+    const validOptions = ['hacer pedido', 'estado pedido', 'informacion', 'información'];
+    
+    if (textLower === 'hacer pedido') {
+      const cliente = await DBService.getClienteByPhone(from);
+      if (!cliente) {
+        await WhatsappService.sendNameRequest(numeroCorregido);
+        await SessionService.updateSession(from, { Estado: 'ASK_NAME' });
+        startSessionTimeout(from, 'ASK_NAME');
+      } else {
+        await WhatsappService.sendOrderRequest(numeroCorregido);
+        await SessionService.updateSession(from, { Estado: 'TAKING_ORDER', Buffer: JSON.stringify({ pedido: '' }) });
+        startSessionTimeout(from, 'TAKING_ORDER');
+      }
+      return { shouldHandleButton: false };
+    }
+    
+    if (textLower === 'estado pedido') {
+      await WhatsappService.sendLastOrderStatus(numeroCorregido, from);
+      return { shouldHandleButton: false };
+    }
+    
+    if (textLower === 'informacion' || textLower === 'información') {
+      await WhatsappService.sendInformationOptions(numeroCorregido);
+      return { shouldHandleButton: false };
+    }
+    
+    // Opción no reconocida - informar al usuario
+    await WhatsappService.sendText(numeroCorregido,
+      '❌ No entendí tu respuesta. Por favor, selecciona una opción del menú usando los botones o escribe:\n\n' +
+      '📝 "Hacer pedido"\n' +
+      '📊 "Estado pedido"\n' +
+      'ℹ️ "Información"'
+    );
+    await WhatsappService.sendMainMenu(numeroCorregido);
+    
+    logger.warn('⚠️  Opción de menú no válida de %s: %s', from, text);
     return { shouldHandleButton: false };
+  } catch (err) {
+    logger.error('❌ Error en handleMenuState para %s: %s', from, err.message);
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ Ocurrió un error. Por favor, escribe "menu" para volver a intentar.');
+    throw err;
   }
-  
-  if (textLower === 'estado pedido') {
-    await WhatsappService.sendLastOrderStatus(numeroCorregido, from);
-    return { shouldHandleButton: false };
-  }
-  
-  if (textLower === 'informacion' || textLower === 'información') {
-    await WhatsappService.sendInformationOptions(numeroCorregido);
-    return { shouldHandleButton: false };
-  }
-  
-  // Opción no reconocida - informar al usuario
-  await WhatsappService.sendText(numeroCorregido,
-    '❌ No entendí tu respuesta. Por favor, selecciona una opción del menú usando los botones o escribe:\n\n' +
-    '📝 "Hacer pedido"\n' +
-    '📊 "Estado pedido"\n' +
-    'ℹ️ "Información"'
-  );
-  await WhatsappService.sendMainMenu(numeroCorregido);
-  
-  logger.warn('⚠️  Opción de menú no válida de %s: %s', from, text);
-  return { shouldHandleButton: false };
 }
 
 /**
@@ -127,85 +141,92 @@ export async function handleAskNameState(from, text, numeroCorregido) {
  * Maneja el estado ASK_ADDRESS - Solicitar dirección
  */
 export async function handleAskAddressState(from, text, session, numeroCorregido) {
-  // Validar longitud mínima de dirección (al menos 10 caracteres)
-  const validation = validateText(text, 10, 500);
-  
-  if (!validation.isValid) {
-    await WhatsappService.sendText(numeroCorregido, 
-      `❌ ${validation.error}.\n\n` +
-      '📍 Por favor, escribe tu dirección completa (mínimo 10 caracteres).\n' +
-      'Incluye: calle, número, colonia\n\n' +
-      'Ejemplo: Av. Juárez 123, Col. Centro'
-    );
-    logger.warn('⚠️  Dirección inválida de %s: %s', from, validation.error);
-    return;
-  }
-  
-  // Validar que la dirección tenga al menos un número (número de calle)
-  if (!/\d/.test(validation.sanitized)) {
-    await WhatsappService.sendText(numeroCorregido,
-      '❌ La dirección debe incluir un número de casa/edificio.\n\n' +
-      '📍 Ejemplo: Av. Juárez 123, Col. Centro'
-    );
-    logger.warn('⚠️  Dirección sin número de %s', from);
-    return;
-  }
-  
-  // Validar que tenga letras (nombre de calle/colonia)
-  if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]{3,}/.test(validation.sanitized)) {
-    await WhatsappService.sendText(numeroCorregido,
-      '❌ La dirección debe incluir el nombre de la calle o colonia.\n\n' +
-      '📍 Ejemplo: Av. Juárez 123, Col. Centro'
-    );
-    logger.warn('⚠️  Dirección sin nombre de calle de %s', from);
-    return;
-  }
-  
-  const customer = await DBService.getClienteByPhone(from);
-  
-  if (!customer) {
-    // Cliente nuevo - crear registro
-    await DBService.createCliente({ 
-      telefono: from, 
-      nombre: session.NombreTemporal || 'Cliente', 
-      direccion: validation.sanitized 
-    });
+  try {
+    // Validar longitud mínima de dirección (al menos 10 caracteres)
+    const validation = validateText(text, 10, 500);
     
-    await WhatsappService.sendText(numeroCorregido, 
-      '✅ Perfecto! Tu información ha sido guardada.');
-    await WhatsappService.sendOrderRequest(numeroCorregido);
-    await SessionService.updateSession(from, { 
-      Estado: 'TAKING_ORDER', 
-      NombreTemporal: null,
-      Buffer: JSON.stringify({ pedido: '' })
-    });
-    startSessionTimeout(from, 'TAKING_ORDER');
-    
-    logger.info('✅ Cliente nuevo registrado: %s - %s', from, session.NombreTemporal);
-  } else {
-    // Cliente existente - actualizar dirección
-    await DBService.updateCliente(from, validation.sanitized);
-    
-    const buf = JSON.parse(session.Buffer || '{"pedido": ""}');
-    
-    if (!buf.pedido || buf.pedido.trim() === "") {
+    if (!validation.isValid) {
       await WhatsappService.sendText(numeroCorregido, 
-        '✅ Dirección actualizada. Ahora escribe tu pedido.');
+        `❌ ${validation.error}.\n\n` +
+        '📍 Por favor, escribe tu dirección completa (mínimo 10 caracteres).\n' +
+        'Incluye: calle, número, colonia\n\n' +
+        'Ejemplo: Av. Juárez 123, Col. Centro'
+      );
+      logger.warn('⚠️  Dirección inválida de %s: %s', from, validation.error);
+      return;
+    }
+    
+    // Validar que la dirección tenga al menos un número (número de calle)
+    if (!/\d/.test(validation.sanitized)) {
+      await WhatsappService.sendText(numeroCorregido,
+        '❌ La dirección debe incluir un número de casa/edificio.\n\n' +
+        '📍 Ejemplo: Av. Juárez 123, Col. Centro'
+      );
+      logger.warn('⚠️  Dirección sin número de %s', from);
+      return;
+    }
+    
+    // Validar que tenga letras (nombre de calle/colonia)
+    if (!/[a-zA-ZáéíóúÁÉÍÓÚñÑ]{3,}/.test(validation.sanitized)) {
+      await WhatsappService.sendText(numeroCorregido,
+        '❌ La dirección debe incluir el nombre de la calle o colonia.\n\n' +
+        '📍 Ejemplo: Av. Juárez 123, Col. Centro'
+      );
+      logger.warn('⚠️  Dirección sin nombre de calle de %s', from);
+      return;
+    }
+    
+    const customer = await DBService.getClienteByPhone(from);
+    
+    if (!customer) {
+      // Cliente nuevo - crear registro
+      await DBService.createCliente({ 
+        telefono: from, 
+        nombre: session.NombreTemporal || 'Cliente', 
+        direccion: validation.sanitized 
+      });
+      
+      await WhatsappService.sendText(numeroCorregido, 
+        '✅ Perfecto! Tu información ha sido guardada.');
       await WhatsappService.sendOrderRequest(numeroCorregido);
       await SessionService.updateSession(from, { 
-        Estado: 'TAKING_ORDER',
+        Estado: 'TAKING_ORDER', 
+        NombreTemporal: null,
         Buffer: JSON.stringify({ pedido: '' })
       });
       startSessionTimeout(from, 'TAKING_ORDER');
-    } else {
-      // Ya tenía un pedido en buffer, confirmar
-      const folio = DBService.generateFolio();
-      await DBService.createPedido(customer.ClienteID, folio, 'En espera de surtir', buf.pedido);
-      await WhatsappService.sendOrderConfirmation(numeroCorregido, folio);
-      await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
       
-      logger.info('✅ Pedido creado con folio: %s', folio);
+      logger.info('✅ Cliente nuevo registrado: %s - %s', from, session.NombreTemporal);
+    } else {
+      // Cliente existente - actualizar dirección
+      await DBService.updateCliente(from, validation.sanitized);
+      
+      const buf = JSON.parse(session.Buffer || '{"pedido": ""}');
+      
+      if (!buf.pedido || buf.pedido.trim() === "") {
+        await WhatsappService.sendText(numeroCorregido, 
+          '✅ Dirección actualizada. Ahora escribe tu pedido.');
+        await WhatsappService.sendOrderRequest(numeroCorregido);
+        await SessionService.updateSession(from, { 
+          Estado: 'TAKING_ORDER',
+          Buffer: JSON.stringify({ pedido: '' })
+        });
+        startSessionTimeout(from, 'TAKING_ORDER');
+      } else {
+        // Ya tenía un pedido en buffer, confirmar
+        const folio = DBService.generateFolio();
+        await DBService.createPedido(customer.ClienteID, folio, 'En espera de surtir', buf.pedido);
+        await WhatsappService.sendOrderConfirmation(numeroCorregido, folio);
+        await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
+        
+        logger.info('✅ Pedido creado con folio: %s', folio);
+      }
     }
+  } catch (err) {
+    logger.error('❌ Error en handleAskAddressState para %s: %s', from, err.message);
+    await WhatsappService.sendText(numeroCorregido, 
+      '❌ Ocurrió un error al procesar tu dirección. Por favor, intenta de nuevo o escribe "menu".');
+    throw err;
   }
 }
 

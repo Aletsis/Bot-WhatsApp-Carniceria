@@ -42,27 +42,50 @@ export function getPoolInstance() {
 }
 
 export default {
+  /**
+   * Obtiene un cliente por su número de teléfono
+   * @param {string} telefono - Número de teléfono del cliente
+   * @returns {Promise<Object|null>} Cliente encontrado o null si no existe
+   * @throws {Error} Si hay un error de conexión o consulta a BD
+   */
   getClienteByPhone: async (telefono) => {
-    try {
-      const pool = await getPool();
-      const res = await pool.request()
-        .input('telefono', sql.NVarChar, telefono)
-        .query('SELECT * FROM Clientes WHERE NumeroTelefono = @telefono');
-      return res.recordset[0] || null;
-    } catch (err) {
-      logger.error('Error obteniendo cliente', err);
-      return null;
-    }
+    const pool = await getPool();
+    const res = await pool.request()
+      .input('telefono', sql.NVarChar, telefono)
+      .query('SELECT * FROM Clientes WHERE NumeroTelefono = @telefono');
+    
+    const cliente = res.recordset[0] || null;
+    logger.debug('Cliente obtenido: %s - %s', telefono, cliente ? 'Encontrado' : 'No encontrado');
+    return cliente;
   },
 
+  /**
+   * Actualiza la dirección de un cliente existente
+   * @param {string} telefono - Número de teléfono del cliente
+   * @param {string} direccion - Nueva dirección
+   * @returns {Promise<number>} Número de filas afectadas
+   * @throws {Error} Si hay un error de conexión o consulta a BD
+   */
   updateCliente: async (telefono, direccion) => {
     const pool = await getPool();
-    await pool.request()
+    const result = await pool.request()
       .input('telefono', sql.NVarChar, telefono)
       .input('direccion', sql.NVarChar, direccion)
       .query('UPDATE Clientes SET Direccion=@direccion WHERE NumeroTelefono=@telefono');
+    
+    logger.info('Cliente actualizado: %s - Filas afectadas: %d', telefono, result.rowsAffected[0]);
+    return result.rowsAffected[0];
   },
 
+  /**
+   * Crea un nuevo cliente
+   * @param {Object} params - Datos del cliente
+   * @param {string} params.telefono - Número de teléfono
+   * @param {string} params.nombre - Nombre completo
+   * @param {string} params.direccion - Dirección
+   * @returns {Promise<void>}
+   * @throws {Error} Si hay un error de conexión, consulta a BD o si el teléfono ya existe
+   */
   createCliente: async ({ telefono, nombre, direccion }) => {
     const pool = await getPool();
     await pool.request()
@@ -70,14 +93,29 @@ export default {
       .input('nombre', sql.NVarChar, nombre)
       .input('direccion', sql.NVarChar, direccion)
       .query('INSERT INTO Clientes (NumeroTelefono, Nombre, Direccion) VALUES (@telefono,@nombre,@direccion)');
+    
+    logger.info('Cliente creado: %s - %s', telefono, nombre);
   },
 
+  /**
+   * Genera un folio único para un pedido
+   * @returns {string} Folio en formato CAR-YYYYMMDD-XXXX
+   */
   generateFolio: () => {
     const d = dayjs().format('YYYYMMDD');
     const rnd = Math.floor(Math.random() * 9000) + 1000;
     return `CAR-${d}-${rnd}`;
   },
 
+  /**
+   * Crea un nuevo pedido
+   * @param {number} clienteId - ID del cliente
+   * @param {string} folio - Folio del pedido
+   * @param {string} estado - Estado inicial del pedido
+   * @param {string} items - Contenido del pedido en texto
+   * @returns {Promise<number>} ID del pedido creado
+   * @throws {Error} Si hay un error de conexión o consulta a BD
+   */
   createPedido: async (clienteId, folio, estado = 'En espera de surtir', items) => {
     const pool = await getPool();
     const res = await pool.request()
@@ -86,9 +124,23 @@ export default {
       .input('Estado', sql.NVarChar, estado)
       .input('Items', sql.NVarChar, items)
       .query('INSERT INTO Pedidos (ClienteID,Folio,Estado,Contenido) OUTPUT INSERTED.PedidoID VALUES (@ClienteID,@Folio,@Estado,@Items)');
-    return res.recordset[0].PedidoID;
+    
+    const pedidoId = res.recordset[0].PedidoID;
+    logger.info('Pedido creado: %s - ID: %d - Cliente: %d', folio, pedidoId, clienteId);
+    return pedidoId;
   },
 
+  /**
+   * Inserta el detalle de un pedido (productos individuales)
+   * @param {number} pedidoId - ID del pedido
+   * @param {Object} item - Item del pedido
+   * @param {string} item.producto - Nombre del producto
+   * @param {number} item.cantidad - Cantidad
+   * @param {string} item.unidad - Unidad de medida
+   * @param {string} [item.observaciones] - Observaciones opcionales
+   * @returns {Promise<void>}
+   * @throws {Error} Si hay un error de conexión o consulta a BD
+   */
   insertDetallePedido: async (pedidoId, item) => {
     const pool = await getPool();
     await pool.request()
@@ -98,8 +150,16 @@ export default {
       .input('Unidad', sql.NVarChar, item.unidad)
       .input('Observaciones', sql.NVarChar, item.observaciones || null)
       .query('INSERT INTO DetallePedidos (PedidoID,Producto,Cantidad,Unidad,Observaciones) VALUES (@PedidoID,@Producto,@Cantidad,@Unidad,@Observaciones)');
+    
+    logger.debug('Detalle de pedido insertado: PedidoID=%d, Producto=%s', pedidoId, item.producto);
   },
 
+  /**
+   * Obtiene el último pedido de un cliente por su número de teléfono
+   * @param {string} telefono - Número de teléfono del cliente
+   * @returns {Promise<Object|null>} Último pedido o null si no tiene pedidos
+   * @throws {Error} Si hay un error de conexión o consulta a BD
+   */
   getUltimoPedidoPorCliente: async (telefono) => {
     const pool = await getPool();
     const res = await pool.request().input('telefono', sql.NVarChar, telefono)
@@ -108,6 +168,9 @@ export default {
               JOIN Clientes c ON c.ClienteID = p.ClienteID
               WHERE c.NumeroTelefono = @telefono
               ORDER BY p.Fecha DESC`);
-    return res.recordset[0] || null;
+    
+    const pedido = res.recordset[0] || null;
+    logger.debug('Último pedido consultado: %s - %s', telefono, pedido ? `Folio: ${pedido.Folio}` : 'Sin pedidos');
+    return pedido;
   }
 };
