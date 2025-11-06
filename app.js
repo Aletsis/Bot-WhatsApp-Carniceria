@@ -1,8 +1,11 @@
 import express from 'express';
 import bodyParser from 'body-parser';
+import session from 'express-session';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import webhookRouter from './src/routes/webhook.js';
+import dashboardRouter from './src/routes/dashboard.js';
+import authRouter from './src/routes/auth.js';
 import { getPool, getPoolInstance } from './src/services/dbService.js';
 import { initializeDatabase, checkSqlServerConnection } from './src/services/dbInitService.js';
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
@@ -22,34 +25,44 @@ checkEnv();
 
 const app = express();
 
-// Configurar trust proxy de manera restrictiva
-// Para desarrollo: solo confía en loopback (localhost)
-// Para producción con IIS: especifica el número de proxies (usualmente 1)
+// Configurar trust proxy
 const isProduction = process.env.NODE_ENV === 'production';
 app.set('trust proxy', isProduction ? 1 : 'loopback');
 
+// Configurar sesiones
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'carniceria-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: isProduction, // Solo HTTPS en producción
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 horas
+  }
+}));
+
 // Rate limiting global
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // 100 requests por ventana
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false }, // Deshabilitar validación estricta
+  validate: { xForwardedForHeader: false },
   handler: (req, res) => {
     logger.warn('🚨 Rate limit excedido desde IP: %s', req.ip);
     res.status(429).json({ error: 'Too many requests, please try again later.' });
   }
 });
 
-// Rate limiting específico para webhook
+// Rate limiting para webhook
 const webhookLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 minuto
-  max: 30, // 30 mensajes por minuto por IP
+  windowMs: 1 * 60 * 1000,
+  max: 30,
   message: { error: 'Too many webhook requests' },
   standardHeaders: true,
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false }, // Deshabilitar validación estricta
+  validate: { xForwardedForHeader: false },
   handler: (req, res) => {
     logger.warn('🚨 Webhook rate limit excedido desde: %s', req.ip);
     res.status(429).json({ error: 'Too many webhook requests' });
@@ -59,35 +72,41 @@ const webhookLimiter = rateLimit({
 // Aplicar middlewares
 app.use(globalLimiter);
 app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true })); // Para procesar forms
 
-// Rutas
+// Servir archivos estáticos
+app.use('/css', express.static('src/public/css'));
+app.use('/js', express.static('src/public/js'));
+
+// Rutas públicas
 app.get('/', (req, res) => res.send('Carniceria WhatsApp Bot is RUNNING'));
+app.use('/', authRouter); // Login/Logout
 app.use('/webhook', webhookLimiter, webhookRouter);
+
+// Rutas protegidas
+app.use('/dashboard', dashboardRouter);
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {
     logger.info('✅ Servidor corriendo en http://localhost:%s', PORT);
 });
 
-// Inicializar base de datos automáticamente
+// Inicializar base de datos
 async function initApp() {
   try {
     await checkSqlServerConnection();
     await initializeDatabase();
     await getPool();
-    
     logger.info('🚀 Aplicación inicializada correctamente');
   } catch (err) {
-    logger.error('❌ Error al inicializar la aplicación:', err.message);
+    logger.error('❌ Error al inicializar:', err.message);
     process.exit(1);
   }
 }
 
 initApp();
 
-/* -------------------
-   Handlers globales
-------------------- */
+// Handlers globales
 process.on('unhandledRejection', (reason) => {
   logger.error('[unhandledRejection] Razón:', reason);
   gracefulShutdown({ server, pool: getPoolInstance() });

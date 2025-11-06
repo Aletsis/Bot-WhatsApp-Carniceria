@@ -1,0 +1,325 @@
+import { getPool } from '../services/dbService.js';
+import logger from '../logger.js';
+import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
+
+export async function getStats(req, res) {
+  try {
+    const pool = await getPool();
+    
+    // Estadísticas principales
+    const stats = {
+      totalClientes: await pool.request()
+        .query('SELECT COUNT(*) as total FROM Clientes WHERE Activo = 1')
+        .then(r => r.recordset[0].total),
+      
+      pedidosHoy: await pool.request()
+        .query(`SELECT COUNT(*) as total FROM Pedidos 
+                WHERE CAST(Fecha AS DATE) = CAST(SYSDATETIME() AS DATE)`)
+        .then(r => r.recordset[0].total),
+      
+      pedidosPendientes: await pool.request()
+        .query(`SELECT COUNT(*) as total FROM Pedidos 
+                WHERE Estado = 'En espera de surtir'`)
+        .then(r => r.recordset[0].total),
+      
+      sesionesActivas: await pool.request()
+        .query(`SELECT COUNT(*) as total FROM Conversaciones 
+                WHERE DATEDIFF(MINUTE, UltimaInteraccion, SYSDATETIME()) <= 30`)
+        .then(r => r.recordset[0].total),
+      
+      timeoutsActivos: getActiveTimeouts().active
+    };
+    
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    logger.error('Error obteniendo estadísticas:', err.message, err.stack);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function getPedidosRecientes(req, res) {
+  try {
+    logger.info('📋 Solicitando pedidos recientes...');
+    const pool = await getPool();
+    const limit = parseInt(req.query.limit) || 20;
+    
+    logger.info('Pool obtenido, ejecutando query con limit:', limit);
+    
+    const result = await pool.request()
+      .query(`
+        SELECT TOP (${limit})
+          p.PedidoID,
+          p.Folio as FolioPedido,
+          p.Estado as EstadoPedido,
+          p.Fecha as FechaCreacion,
+          p.Contenido as DetallesPedido,
+          p.Notas,
+          c.Nombre as NombreCliente,
+          c.NumeroTelefono as TelefonoCliente,
+          c.Direccion as DireccionEntrega
+        FROM Pedidos p
+        INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
+        ORDER BY p.Fecha DESC
+      `);
+    
+    logger.info('Query ejecutado, pedidos encontrados:', result.recordset.length);
+    res.json({ success: true, data: result.recordset });
+  } catch (err) {
+    logger.error('❌ Error obteniendo pedidos:', err.message);
+    logger.error('Stack trace:', err.stack);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function updateEstadoPedido(req, res) {
+  try {
+    const { pedidoId } = req.params;
+    const { estado, notas } = req.body;
+    
+    const validStates = [
+      'En espera de surtir', 
+      'En preparación', 
+      'Listo para entrega', 
+      'Entregado', 
+      'Cancelado'
+    ];
+    
+    if (!validStates.includes(estado)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Estado no válido' 
+      });
+    }
+    
+    const pool = await getPool();
+    await pool.request()
+      .input('pedidoId', pedidoId)
+      .input('estado', estado)
+      .input('notas', notas || null)
+      .query(`UPDATE Pedidos 
+              SET Estado = @estado, Notas = @notas 
+              WHERE PedidoID = @pedidoId`);
+    
+    logger.info('Estado actualizado: Pedido %s → %s', pedidoId, estado);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Error actualizando estado:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function getClientes(req, res) {
+  try {
+    const pool = await getPool();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+    
+    const result = await pool.request()
+      .input('limit', limit)
+      .input('offset', offset)
+      .query(`
+        SELECT 
+          c.ClienteID, c.NumeroTelefono, c.Nombre, c.Direccion, c.FechaAlta,
+          (SELECT COUNT(*) FROM Pedidos WHERE ClienteID = c.ClienteID) as TotalPedidos
+        FROM Clientes c
+        WHERE c.Activo = 1
+        ORDER BY c.FechaAlta DESC
+        OFFSET @offset ROWS
+        FETCH NEXT @limit ROWS ONLY
+      `);
+    
+    res.json({ success: true, data: result.recordset, page, limit });
+  } catch (err) {
+    logger.error('Error obteniendo clientes:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+export async function getSesionesActivas(req, res) {
+  try {
+    const pool = await getPool();
+    
+    const result = await pool.request()
+      .query(`
+        SELECT 
+          NumeroTelefono, 
+          Estado, 
+          UltimaInteraccion,
+          DATEDIFF(MINUTE, UltimaInteraccion, SYSDATETIME()) as MinutosInactivo
+        FROM Conversaciones
+        WHERE DATEDIFF(MINUTE, UltimaInteraccion, SYSDATETIME()) <= 30
+        ORDER BY UltimaInteraccion DESC
+      `);
+    
+    res.json({ success: true, data: result.recordset });
+  } catch (err) {
+    logger.error('Error obteniendo sesiones:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// ============= GESTIÓN DE CLIENTES =============
+
+/**
+ * Crear un nuevo cliente
+ */
+export async function createCliente(req, res) {
+  try {
+    const { nombre, telefono, direccion } = req.body;
+    
+    // Validaciones
+    if (!nombre || !telefono) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Nombre y teléfono son requeridos' 
+      });
+    }
+    
+    if (nombre.length < 2 || nombre.length > 200) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El nombre debe tener entre 2 y 200 caracteres' 
+      });
+    }
+    
+    if (!/^[0-9]{10,15}$/.test(telefono)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El teléfono debe tener entre 10 y 15 dígitos' 
+      });
+    }
+    
+    const pool = await getPool();
+    
+    // Verificar si ya existe
+    const existing = await pool.request()
+      .input('telefono', telefono)
+      .query('SELECT ClienteID FROM Clientes WHERE NumeroTelefono = @telefono');
+    
+    if (existing.recordset.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Ya existe un cliente con ese teléfono' 
+      });
+    }
+    
+    // Crear cliente
+    await pool.request()
+      .input('telefono', telefono)
+      .input('nombre', nombre)
+      .input('direccion', direccion || null)
+      .query(`
+        INSERT INTO Clientes (NumeroTelefono, Nombre, Direccion) 
+        VALUES (@telefono, @nombre, @direccion)
+      `);
+    
+    logger.info('✅ Cliente creado: %s - %s', telefono, nombre);
+    res.json({ success: true, message: 'Cliente creado exitosamente' });
+  } catch (err) {
+    logger.error('Error creando cliente:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Actualizar un cliente existente
+ */
+export async function updateCliente(req, res) {
+  try {
+    const { clienteId } = req.params;
+    const { nombre, direccion } = req.body;
+    
+    if (!nombre) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El nombre es requerido' 
+      });
+    }
+    
+    if (nombre.length < 2 || nombre.length > 200) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El nombre debe tener entre 2 y 200 caracteres' 
+      });
+    }
+    
+    const pool = await getPool();
+    
+    await pool.request()
+      .input('clienteId', clienteId)
+      .input('nombre', nombre)
+      .input('direccion', direccion || null)
+      .query(`
+        UPDATE Clientes 
+        SET Nombre = @nombre, Direccion = @direccion 
+        WHERE ClienteID = @clienteId
+      `);
+    
+    logger.info('✅ Cliente actualizado: ID %s', clienteId);
+    res.json({ success: true, message: 'Cliente actualizado exitosamente' });
+  } catch (err) {
+    logger.error('Error actualizando cliente:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Obtener pedidos de un cliente específico
+ */
+export async function getPedidosCliente(req, res) {
+  try {
+    const { clienteId } = req.params;
+    
+    const pool = await getPool();
+    
+    const result = await pool.request()
+      .input('clienteId', clienteId)
+      .query(`
+        SELECT 
+          PedidoID, Folio, Estado, Fecha, Contenido
+        FROM Pedidos
+        WHERE ClienteID = @clienteId
+        ORDER BY Fecha DESC
+      `);
+    
+    res.json({ success: true, data: result.recordset });
+  } catch (err) {
+    logger.error('Error obteniendo pedidos del cliente:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Actualizar estado de pedido (nuevo formato)
+ */
+export async function updateEstadoPedidoNuevo(req, res) {
+  try {
+    const { pedidoId } = req.params;
+    const { estado } = req.body;
+    
+    // Mapeo de estados nuevos a estados de BD
+    const estadoMap = {
+      'PENDIENTE': 'En espera de surtir',
+      'EN_PROCESO': 'En preparación',
+      'ENTREGADO': 'Entregado',
+      'CANCELADO': 'Cancelado'
+    };
+    
+    const estadoDB = estadoMap[estado] || estado;
+    
+    const pool = await getPool();
+    await pool.request()
+      .input('pedidoId', pedidoId)
+      .input('estado', estadoDB)
+      .query(`UPDATE Pedidos 
+              SET Estado = @estado 
+              WHERE PedidoID = @pedidoId`);
+    
+    logger.info('✅ Estado actualizado: Pedido %s → %s (%s)', pedidoId, estadoDB, estado);
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('❌ Error actualizando estado:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
