@@ -2,6 +2,7 @@ import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import DBService from '../services/dbService.js';
 import { startSessionTimeout, clearSessionTimeout } from '../services/sessionTimeoutService.js';
+import { printTicket, isPrintingEnabled } from '../services/printingService.js';
 import logger from '../logger.js';
 
 /**
@@ -134,9 +135,31 @@ async function handleConfirmarDireccionButton(from, session, numeroCorregido, cl
     return;
   }
   
-  // Crear pedido
+  // Crear pedido en base de datos
   const folio = DBService.generateFolio();
   await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
+  
+  // Intentar imprimir ticket (no bloquea si falla)
+  if (isPrintingEnabled()) {
+    try {
+      await printTicket({
+        folio: folio,
+        cliente: cliente.Nombre,
+        telefono: from,
+        direccion: cliente.Direccion,
+        contenido: buf.pedido
+      });
+      logger.info('🖨️  Ticket impreso exitosamente - Folio: %s', folio);
+    } catch (printError) {
+      // Log del error pero no interrumpe el flujo del pedido
+      logger.error('⚠️  Error al imprimir ticket (pedido registrado) - Folio: %s - Error: %s', 
+        folio, printError.message);
+    }
+  } else {
+    logger.debug('🖨️  Impresión deshabilitada - Folio: %s', folio);
+  }
+  
+  // Enviar confirmación al cliente
   await WhatsappService.sendOrderConfirmation(numeroCorregido, folio);
   await SessionService.updateSession(from, { Estado: 'START', Buffer: null });
   clearSessionTimeout(from); // Pedido completado, limpiar timeout

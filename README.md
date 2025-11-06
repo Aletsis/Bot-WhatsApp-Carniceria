@@ -17,6 +17,7 @@ Bot automatizado de WhatsApp Business para gestión de pedidos de carnicería co
 - [API y Webhooks](#-api-y-webhooks)
 - [Base de Datos](#-base-de-datos)
 - [Gestión de Usuarios](#-gestión-de-usuarios)
+- [Configuración de Impresión](#️-configuración-de-impresión)
 - [Desarrollo](#-desarrollo)
 - [Contribución](#-contribución)
 - [Licencia](#-licencia)
@@ -34,6 +35,7 @@ Bot automatizado de WhatsApp Business para gestión de pedidos de carnicería co
 - **Manejo de sesiones persistente** con timeouts configurables
 - **Botones interactivos** para menú principal
 - **Gestión de estado de pedidos** (En espera, En ruta, Entregado)
+- **Impresión automática de tickets** en impresoras térmicas ESC/POS
 
 ### 📊 Dashboard Web
 - **Interfaz moderna y responsive** para administración
@@ -61,6 +63,14 @@ Bot automatizado de WhatsApp Business para gestión de pedidos de carnicería co
 - **Logs de auditoría** de todos los accesos
 - **Validación de entradas** y sanitización
 - **Variables de entorno** para credenciales sensibles
+
+### 🖨️ Impresión Automática
+- **Impresoras térmicas ESC/POS** compatibles (58mm/80mm)
+- **Impresión automática** al confirmar pedido
+- **Conexión por red (Network)** TCP/IP
+- **Configuración flexible** (habilitar/deshabilitar)
+- **Tickets formateados** con folio, cliente, dirección y detalle
+- **Manejo robusto de errores** (no bloquea el pedido si falla impresión)
 
 ---
 
@@ -143,6 +153,11 @@ SESSION_SECRET=genera_una_clave_secreta_segura
 # Timeouts (milisegundos)
 SESSION_TIMEOUT=300000
 CONVERSATION_TIMEOUT=1800000
+
+# Impresión ESC/POS (opcional)
+PRINTER_ENABLED=false
+PRINTER_HOST=192.168.0.100
+PRINTER_PORT=9100
 
 # Ambiente
 NODE_ENV=development
@@ -505,7 +520,101 @@ node scripts/generate-password.js
 
 ---
 
-## 🛠️ Desarrollo
+## �️ Configuración de Impresión
+
+### Requisitos de Hardware
+
+- **Impresora térmica** compatible con comandos ESC/POS
+- Ancho de papel: **58mm o 80mm**
+- Conexión: **Red Ethernet o WiFi** (TCP/IP)
+- Marcas compatibles: Epson TM, Star TSP, Bixolon, Citizen, y genéricas
+
+### Configuración en .env
+
+```env
+# Habilitar o deshabilitar impresión
+PRINTER_ENABLED=true
+
+# Dirección IP de la impresora en la red local
+PRINTER_HOST=192.168.0.100
+
+# Puerto TCP (generalmente 9100 para ESC/POS)
+PRINTER_PORT=9100
+```
+
+### Encontrar la IP de la Impresora
+
+**Opción 1: Impresión de configuración**
+- La mayoría de impresoras tienen un botón para imprimir configuración de red
+- Busca el valor de "IP Address"
+
+**Opción 2: Desde el panel de administración**
+- Accede al panel web de la impresora desde el navegador
+- La dirección generalmente se muestra en la pantalla LCD de la impresora
+
+**Opción 3: Buscar en la red**
+```bash
+# Windows (PowerShell)
+arp -a
+
+# Linux/Mac
+nmap -sn 192.168.0.0/24
+```
+
+### Formato del Ticket Impreso
+
+```
+        CARNICERÍA
+          PEDIDO
+================================
+Folio: 20251106-0001
+Fecha: 06/11/2025 14:30:45
+
+Cliente: Juan Pérez
+Telefono: 5218123456789
+Direccion: Av. Principal 123, Col. Centro
+
+================================
+DETALLE DEL PEDIDO:
+================================
+1kg de bistec
+500g de chorizo
+2 piezas de pollo
+Observaciones: Sin grasa
+
+================================
+   Gracias por su preferencia
+```
+
+### Solución de Problemas
+
+**La impresora no imprime:**
+1. Verificar que `PRINTER_ENABLED=true` en `.env`
+2. Comprobar conectividad: `ping 192.168.0.100`
+3. Verificar puerto abierto: `telnet 192.168.0.100 9100`
+4. Revisar logs en consola para mensajes de error
+5. Confirmar que la impresora está encendida y con papel
+
+**El ticket se imprime con caracteres extraños:**
+- Verificar que la impresora soporte comandos ESC/POS
+- Comprobar configuración de codificación en la impresora
+
+**Comportamiento del Sistema:**
+- ✅ **Si impresión falla**: El pedido SE REGISTRA en base de datos y el cliente recibe confirmación
+- 🖨️ **Error de impresión**: Solo se registra en logs, no afecta el flujo
+- 📊 **Dashboard**: Muestra todos los pedidos independientemente del estado de impresión
+
+### Deshabilitar Impresión
+
+Para operar sin impresora (solo registro en BD y dashboard):
+
+```env
+PRINTER_ENABLED=false
+```
+
+---
+
+## �🛠️ Desarrollo
 
 ### Scripts Disponibles
 
