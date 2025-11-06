@@ -12,6 +12,7 @@ import { getPool, getPoolInstance } from './src/services/dbService.js';
 import { initializeDatabase, checkSqlServerConnection } from './src/services/dbInitService.js';
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
 import { restoreActiveTimeouts, startCleanupJob } from './src/services/sessionTimeoutService.js';
+import { captureRawBody, validateWebhookSecurityConfig } from './src/middleware/webhookVerification.js';
 import logger from './src/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -102,7 +103,10 @@ const webhookLimiter = rateLimit({
 
 // Aplicar middlewares
 app.use(globalLimiter);
-app.use(bodyParser.json());
+
+// Configurar body parser con captura de raw body para verificación de firma
+// IMPORTANTE: verify() se ejecuta ANTES de parsear el JSON
+app.use(bodyParser.json({ verify: captureRawBody }));
 app.use(bodyParser.urlencoded({ extended: true })); // Para procesar forms
 
 // Servir archivos estáticos del dashboard React (producción)
@@ -151,6 +155,10 @@ async function initApp() {
     await checkSqlServerConnection();
     await initializeDatabase();
     await getPool();
+    
+    // Validar configuración de seguridad del webhook
+    logger.info('🔐 Validando configuración de seguridad...');
+    validateWebhookSecurityConfig();
     
     // Restaurar timeouts activos desde BD (sobrevivir a reinicios)
     await restoreActiveTimeouts();

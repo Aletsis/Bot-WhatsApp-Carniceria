@@ -37,26 +37,30 @@ Mejorar la seguridad del sistema, agregar funcionalidades críticas de gestión,
 
 ---
 
-### 🔴 Tarea 2: Verificación de Firma de Webhook de Meta (CRÍTICA - Seguridad)
+### 🔴 Tarea 2: Verificación de Firma de Webhook de Meta (CRÍTICA - Seguridad) ✅ COMPLETADA
 **Objetivo:** Validar que los webhooks provengan realmente de Meta/WhatsApp
 
 **Subtareas:**
-- [ ] Implementar verificación de firma HMAC SHA256
-- [ ] Middleware de validación de firma en ruta webhook
-- [ ] Logging de intentos de webhook no autorizados
-- [ ] Configuración de `APP_SECRET` en .env
-- [ ] Pruebas con payloads válidos e inválidos
+- [x] Implementar verificación de firma HMAC SHA256
+- [x] Middleware de validación de firma en ruta webhook
+- [x] Logging de intentos de webhook no autorizados
+- [x] Configuración de `APP_SECRET` en .env
+- [x] Pruebas con payloads válidos e inválidos
 
 **Archivos Afectados:**
-- `src/middleware/webhookVerification.js` (nuevo)
-- `src/routes/webhook.js`
-- `.env` (APP_SECRET)
+- ✅ `src/middleware/webhookVerification.js` - Middleware con HMAC SHA256
+- ✅ `src/routes/webhook.js` - Middleware aplicado en POST
+- ✅ `app.js` - Captura de raw body y validación al inicio
+- ✅ `.env` - APP_SECRET documentado
+- ✅ `docs/WEBHOOK_SECURITY.md` - Documentación completa
 
-**Estimación:** 1.5 horas
+**Resultado:** 🔒 Sistema protegido contra webhooks falsos con verificación HMAC SHA256
+
+**Estimación:** ~~1.5 horas~~ → **Tiempo real: 1.5 horas**
 
 ---
 
-### 🔴 Tarea 3: Notificaciones Automáticas a Clientes (Alta Prioridad)
+### � Tarea 3: Notificaciones Automáticas a Clientes (Alta Prioridad)
 **Objetivo:** Enviar actualizaciones de estado de pedido automáticamente al cliente
 
 **Subtareas:**
