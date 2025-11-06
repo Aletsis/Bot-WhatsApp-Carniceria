@@ -1,5 +1,6 @@
 import sql from 'mssql';
 import logger from '../logger.js';
+import { getPool } from './dbService.js';
 
 /**
  * Servicio de Inicialización de Base de Datos
@@ -54,9 +55,9 @@ async function checkDatabaseExists(dbName) {
   } catch (err) {
     logger.error('[DB Init] Error verificando base de datos:', err.message);
     throw err;
-  } finally {
-    if (pool) await pool.close();
   }
+  // NO cerrar el pool - mssql gestiona las conexiones internamente
+  // Cerrar puede afectar a otras referencias del pool global
 }
 
 /**
@@ -87,8 +88,7 @@ async function createDatabase(dbName) {
     
     logger.info('[DB Init] ✅ Base de datos creada exitosamente');
     
-    // Cerrar conexión a master
-    await pool.close();
+    // NO cerrar - mssql gestiona las conexiones internamente
     
     // Conectarse a la nueva base de datos para crear tablas
     const dbConfig = {
@@ -245,9 +245,8 @@ async function createDatabase(dbName) {
   } catch (err) {
     logger.error('[DB Init] ❌ Error creando base de datos:', err.message);
     throw err;
-  } finally {
-    if (pool) await pool.close();
   }
+  // NO cerrar el pool - mssql gestiona las conexiones internamente
 }
 
 /**
@@ -256,21 +255,9 @@ async function createDatabase(dbName) {
  * @param {string[]} missingTables - Array de nombres de tablas faltantes
  */
 async function createMissingTables(dbName, missingTables) {
-  const config = {
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    server: process.env.DB_HOST,
-    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
-    database: dbName,
-    options: {
-      encrypt: false,
-      trustServerCertificate: true
-    }
-  };
-
-  let pool;
   try {
-    pool = await sql.connect(config);
+    // Usar el pool compartido en lugar de crear uno nuevo
+    const pool = await getPool();
     logger.info('[DB Init] 🔨 Creando tablas faltantes...');
     
     for (const tableName of missingTables) {
@@ -347,9 +334,8 @@ async function createMissingTables(dbName, missingTables) {
   } catch (err) {
     logger.error('[DB Init] ❌ Error creando tablas faltantes:', err.message);
     throw err;
-  } finally {
-    if (pool) await pool.close();
   }
+  // No cerrar el pool compartido
 }
 
 /**
@@ -358,21 +344,9 @@ async function createMissingTables(dbName, missingTables) {
  * @returns {Promise<boolean>}
  */
 async function checkTablesExist(dbName) {
-  const config = {
-    user: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    server: process.env.DB_HOST,
-    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
-    database: dbName,
-    options: {
-      encrypt: false,
-      trustServerCertificate: true
-    }
-  };
-
-  let pool;
   try {
-    pool = await sql.connect(config);
+    // Usar el pool compartido en lugar de crear uno nuevo
+    const pool = await getPool();
     const result = await pool.request().query(`
       SELECT COUNT(*) as TableCount 
       FROM INFORMATION_SCHEMA.TABLES 
@@ -403,11 +377,11 @@ async function checkTablesExist(dbName) {
     
     return foundTables === expectedTables;
   } catch (err) {
+    console.error('[DB Init] Error verificando tablas - ERROR COMPLETO:', err);
     logger.error('[DB Init] Error verificando tablas:', err.message);
     return false;
-  } finally {
-    if (pool) await pool.close();
   }
+  // No cerrar el pool compartido
 }
 
 /**
@@ -453,9 +427,9 @@ export async function initializeDatabase() {
         }
       };
       
-      let pool;
       try {
-        pool = await sql.connect(config);
+        // Usar el pool compartido en lugar de crear uno nuevo
+        const pool = await getPool();
         const tablesCheck = await pool.request().query(`
           SELECT TABLE_NAME 
           FROM INFORMATION_SCHEMA.TABLES 
@@ -471,9 +445,11 @@ export async function initializeDatabase() {
           await createMissingTables(dbName, missingTables);
           logger.info('[DB Init] ✅ Tablas creadas exitosamente');
         }
-      } finally {
-        if (pool) await pool.close();
+      } catch (innerErr) {
+        logger.error('[DB Init] Error verificando/creando tablas:', innerErr.message);
+        throw innerErr;
       }
+      // No cerrar el pool compartido
     }
     
     logger.info('[DB Init] ✅ Todas las tablas verificadas');
@@ -513,7 +489,6 @@ export async function checkSqlServerConnection() {
     logger.error('[DB Init] ❌ No se pudo conectar a SQL Server:', err.message);
     logger.error('[DB Init] 💡 Verifica que SQL Server esté corriendo y las credenciales sean correctas');
     throw err;
-  } finally {
-    if (pool) await pool.close();
   }
+  // NO cerrar el pool - mssql gestiona las conexiones internamente
 }

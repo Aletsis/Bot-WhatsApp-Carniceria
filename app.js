@@ -152,9 +152,12 @@ const server = app.listen(PORT, () => {
 // Inicializar base de datos
 async function initApp() {
   try {
-    await checkSqlServerConnection();
-    await initializeDatabase();
+    // Primero inicializar el pool global a la BD principal
     await getPool();
+    logger.info('[DB Init] 🔌 Pool de conexión inicializado');
+    
+    // Ahora podemos inicializar la base de datos que usará el pool compartido
+    await initializeDatabase();
     
     // Validar configuración de seguridad del webhook
     logger.info('🔐 Validando configuración de seguridad...');
@@ -169,6 +172,7 @@ async function initApp() {
     logger.info('🚀 Aplicación inicializada correctamente');
   } catch (err) {
     logger.error('❌ Error al inicializar:', err.message);
+    console.error('[INIT] Error completo:', err);
     process.exit(1);
   }
 }
