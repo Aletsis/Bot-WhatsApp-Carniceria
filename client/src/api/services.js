@@ -88,14 +88,33 @@ export const usuariosService = {
   },
 
   cambiarPassword: async (id, password) => {
-    const response = await axios.post(`/dashboard/usuarios/${id}/cambiar-password`, {
+    const response = await axios.put(`/dashboard/usuarios/${id}/password`, {
       password,
     });
     return response.data;
   },
 
   toggle: async (id) => {
-    const response = await axios.put(`/dashboard/usuarios/${id}/toggle`);
+    const response = await axios.put(`/dashboard/usuarios/${id}/estado`);
+    return response.data;
+  },
+};
+
+export const configuracionesService = {
+  getAll: async () => {
+    const response = await axios.get('/dashboard/configuraciones');
+    return response.data.data || response.data;
+  },
+
+  getByCategory: async (categoria) => {
+    const response = await axios.get(`/dashboard/configuraciones/${categoria}`);
+    return response.data.data || response.data;
+  },
+
+  update: async (configuraciones) => {
+    const response = await axios.put('/dashboard/configuraciones', {
+      configuraciones,
+    });
     return response.data;
   },
 };

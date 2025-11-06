@@ -74,6 +74,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
       path: '/dashboard/usuarios',
       icon: '👤',
     });
+    menuItems.push({
+      name: 'Configuración',
+      path: '/dashboard/configuracion',
+      icon: '⚙️',
+    });
   }
 
   return (

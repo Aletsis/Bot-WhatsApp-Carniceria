@@ -6,6 +6,7 @@ import PedidosPage from './pages/PedidosPage';
 import ClientesPage from './pages/ClientesPage';
 import ConversacionesPage from './pages/ConversacionesPage';
 import UsuariosPage from './pages/UsuariosPage';
+import ConfiguracionPage from './pages/ConfiguracionPage';
 
 function App() {
   return (
@@ -49,6 +50,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <UsuariosPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/configuracion"
+            element={
+              <ProtectedRoute>
+                <ConfiguracionPage />
               </ProtectedRoute>
             }
           />

@@ -6,6 +6,7 @@ import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 import { printTicket, isPrintingEnabled } from '../services/printingService.js';
 import { updatePedidoEstadoWithVersion } from '../services/transactionService.js';
 import whatsappService from '../services/whatsappService.js';
+import * as configService from '../services/configService.js';
 
 /**
  * Verifica si el usuario está autenticado
@@ -786,6 +787,113 @@ export async function reimprimirPedido(req, res) {
     }
   } catch (err) {
     logger.error('❌ Error en reimpresión:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// ==================== GESTIÓN DE CONFIGURACIONES ====================
+
+/**
+ * Obtiene todas las configuraciones del sistema (solo admin)
+ */
+export async function getConfiguraciones(req, res) {
+  try {
+    // Verificar que el usuario es admin
+    if (req.session.user.rol !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Acceso denegado. Solo administradores pueden ver configuraciones.' 
+      });
+    }
+
+    const configs = await configService.getAllConfigs();
+    
+    logger.info('✅ Configuraciones obtenidas por admin: %s', req.session.user.username);
+    res.json({ success: true, data: configs });
+  } catch (err) {
+    logger.error('❌ Error obteniendo configuraciones:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Actualiza configuraciones del sistema (solo admin)
+ */
+export async function updateConfiguraciones(req, res) {
+  try {
+    // Verificar que el usuario es admin
+    if (req.session.user.rol !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Acceso denegado. Solo administradores pueden modificar configuraciones.' 
+      });
+    }
+
+    const { configuraciones } = req.body;
+    
+    if (!configuraciones || !Array.isArray(configuraciones)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Se requiere un array de configuraciones' 
+      });
+    }
+
+    logger.info('🔧 Actualizando %d configuraciones por: %s', 
+                configuraciones.length, req.session.user.username);
+
+    const resultados = await configService.updateMultipleConfigs(configuraciones);
+
+    if (resultados.fallidas > 0) {
+      logger.warn('⚠️ Algunas configuraciones fallaron: %d/%d', 
+                  resultados.fallidas, configuraciones.length);
+      return res.status(207).json({ // 207 Multi-Status
+        success: true,
+        message: `${resultados.exitosas} configuraciones actualizadas, ${resultados.fallidas} fallaron`,
+        data: resultados
+      });
+    }
+
+    logger.info('✅ Todas las configuraciones actualizadas exitosamente');
+    res.json({ 
+      success: true, 
+      message: `${resultados.exitosas} configuraciones actualizadas correctamente`,
+      data: resultados
+    });
+  } catch (err) {
+    logger.error('❌ Error actualizando configuraciones:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Obtiene configuraciones por categoría (solo admin)
+ */
+export async function getConfiguracionesPorCategoria(req, res) {
+  try {
+    // Verificar que el usuario es admin
+    if (req.session.user.rol !== 'admin') {
+      return res.status(403).json({ 
+        success: false, 
+        error: 'Acceso denegado. Solo administradores pueden ver configuraciones.' 
+      });
+    }
+
+    const { categoria } = req.params;
+    
+    const validCategories = ['PRINTER', 'WHATSAPP', 'SYSTEM', 'NOTIFICATIONS'];
+    if (!validCategories.includes(categoria)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: `Categoría inválida. Categorías permitidas: ${validCategories.join(', ')}` 
+      });
+    }
+
+    const configs = await configService.getConfigsByCategory(categoria);
+    
+    logger.debug('✅ Configuraciones de %s obtenidas por: %s', categoria, req.session.user.username);
+    res.json({ success: true, data: configs });
+  } catch (err) {
+    logger.error('❌ Error obteniendo configuraciones de %s:', req.params.categoria, err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 }

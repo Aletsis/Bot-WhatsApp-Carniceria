@@ -37,4 +37,9 @@ router.post('/usuarios', requireRole('admin'), dashboardController.createUsuario
 router.put('/usuarios/:usuarioId/password', requireRole('admin'), dashboardController.cambiarPassword);
 router.put('/usuarios/:usuarioId/estado', requireRole('admin'), dashboardController.toggleUsuario);
 
+// API endpoints - Configuraciones (solo para admins)
+router.get('/configuraciones', requireRole('admin'), dashboardController.getConfiguraciones);
+router.put('/configuraciones', requireRole('admin'), dashboardController.updateConfiguraciones);
+router.get('/configuraciones/:categoria', requireRole('admin'), dashboardController.getConfiguracionesPorCategoria);
+
 export default router;
