@@ -8,6 +8,7 @@
     "start": "node app.js",
     "dev": "nodemon --watch src --exec node app.js",
     "init-db": "node scripts/init-db.js",
+    "manage-users": "node scripts/manage-users.js",
     "prod": "set NODE_ENV=production && node app.js",
     "lint": "eslint src/** --fix",
     "format": "prettier --write './src/**/*.js'"

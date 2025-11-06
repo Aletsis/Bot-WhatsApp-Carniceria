@@ -1,6 +1,6 @@
 import express from 'express';
 import * as dashboardController from '../controllers/dashboardController.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -26,5 +26,11 @@ router.get('/api/clientes/:clienteId/pedidos', dashboardController.getPedidosCli
 
 // API endpoints - Sesiones
 router.get('/api/sesiones', dashboardController.getSesionesActivas);
+
+// API endpoints - Usuarios (solo para admins)
+router.get('/api/usuarios', requireRole('admin'), dashboardController.getUsuarios);
+router.post('/api/usuarios', requireRole('admin'), dashboardController.createUsuario);
+router.put('/api/usuarios/:usuarioId/password', requireRole('admin'), dashboardController.cambiarPassword);
+router.put('/api/usuarios/:usuarioId/toggle', requireRole('admin'), dashboardController.toggleUsuario);
 
 export default router;

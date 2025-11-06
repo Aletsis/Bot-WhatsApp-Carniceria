@@ -1,4 +1,5 @@
 import { getPool } from '../services/dbService.js';
+import userService from '../services/userService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 
@@ -320,6 +321,150 @@ export async function updateEstadoPedidoNuevo(req, res) {
     res.json({ success: true });
   } catch (err) {
     logger.error('❌ Error actualizando estado:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// ==================== GESTIÓN DE USUARIOS ====================
+
+/**
+ * Obtiene todos los usuarios del sistema
+ */
+export async function getUsuarios(req, res) {
+  try {
+    const usuarios = await userService.getAllUsers();
+    res.json({ success: true, data: usuarios });
+  } catch (err) {
+    logger.error('❌ Error obteniendo usuarios:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Crea un nuevo usuario
+ */
+export async function createUsuario(req, res) {
+  try {
+    const { username, password, rol, nombre, email } = req.body;
+    
+    // Validar campos requeridos
+    if (!username || !password || !rol) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Username, password y rol son requeridos' 
+      });
+    }
+    
+    // Validar rol
+    if (!['admin', 'editor', 'viewer'].includes(rol)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Rol inválido. Debe ser: admin, editor o viewer' 
+      });
+    }
+    
+    // Obtener usuario que lo crea
+    const creadoPor = req.session?.user?.Username || 'DASHBOARD';
+    
+    const usuarioId = await userService.createUser({
+      username,
+      password,
+      rol,
+      nombre,
+      email,
+      creadoPor
+    });
+    
+    logger.info('✅ Usuario creado por %s: %s (ID: %d)', creadoPor, username, usuarioId);
+    res.json({ success: true, data: { usuarioId } });
+  } catch (err) {
+    logger.error('❌ Error creando usuario:', err.message);
+    
+    // Error de username duplicado
+    if (err.message.includes('UNIQUE') || err.message.includes('duplicate')) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'El username ya existe' 
+      });
+    }
+    
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Cambia la contraseña de un usuario
+ */
+export async function cambiarPassword(req, res) {
+  try {
+    const { usuarioId } = req.params;
+    const { newPassword } = req.body;
+    
+    if (!newPassword) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Nueva contraseña es requerida' 
+      });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'La contraseña debe tener al menos 6 caracteres' 
+      });
+    }
+    
+    await userService.updatePassword(parseInt(usuarioId), newPassword);
+    
+    logger.info('✅ Contraseña cambiada por %s para usuario ID: %s', 
+      req.session?.user?.Username, usuarioId);
+    
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('❌ Error cambiando contraseña:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Activa o desactiva un usuario
+ */
+export async function toggleUsuario(req, res) {
+  try {
+    const { usuarioId } = req.params;
+    const { activo } = req.body;
+    
+    if (activo === undefined) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Campo "activo" es requerido' 
+      });
+    }
+    
+    const userId = parseInt(usuarioId);
+    
+    // No permitir desactivarse a sí mismo
+    if (userId === req.session?.user?.UsuarioID) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No puedes desactivar tu propia cuenta' 
+      });
+    }
+    
+    if (activo) {
+      await userService.activateUser(userId);
+    } else {
+      await userService.deactivateUser(userId);
+    }
+    
+    logger.info('✅ Usuario %s %s por %s', 
+      usuarioId, 
+      activo ? 'activado' : 'desactivado',
+      req.session?.user?.Username);
+    
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('❌ Error toggle usuario:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 }

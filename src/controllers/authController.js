@@ -125,21 +125,32 @@ export async function processLogin(req, res) {
     
     // Validar campos
     if (!username || !password) {
+      logger.warn('⚠️ Intento de login sin credenciales completas');
       return res.redirect('/login?error=missing_fields');
     }
     
-    // Autenticar usuario
-    const user = await authenticateUser(username, password);
+    // Obtener IP del cliente
+    const ip = req.ip || req.connection.remoteAddress;
+    
+    // Autenticar usuario usando base de datos
+    const user = await authenticateUser(username, password, ip);
     
     if (!user) {
+      logger.warn('🚫 Login fallido para usuario: %s desde IP: %s', username, ip);
       return res.redirect('/login?error=invalid_credentials');
     }
     
-    // Crear sesión
-    req.session.user = user;
+    // Crear sesión con información completa del usuario
+    req.session.user = {
+      UsuarioID: user.UsuarioID,
+      Username: user.Username,
+      Rol: user.Rol,
+      Nombre: user.Nombre,
+      Email: user.Email
+    };
     req.session.loginTime = new Date();
     
-    logger.info('✅ Login exitoso: %s', username);
+    logger.info('✅ Login exitoso: %s (Rol: %s) desde IP: %s', username, user.Rol, ip);
     res.redirect('/dashboard');
     
   } catch (err) {
@@ -152,7 +163,7 @@ export async function processLogin(req, res) {
  * Cierra la sesión
  */
 export function logout(req, res) {
-  const username = req.session?.user?.username;
+  const username = req.session?.user?.Username || req.session?.user?.username;
   
   req.session.destroy(err => {
     if (err) {

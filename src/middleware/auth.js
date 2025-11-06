@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import userService from '../services/userService.js';
 import logger from '../logger.js';
 
 /**
@@ -35,44 +35,60 @@ export function redirectIfAuth(req, res, next) {
 }
 
 /**
- * Usuarios del sistema (en producción usar base de datos)
- * Contraseñas hasheadas con bcrypt
+ * Middleware para verificar roles específicos
+ * @param {string|string[]} allowedRoles - Roles permitidos
  */
-const USERS = [
-  {
-    username: 'admin',
-    // Contraseña: admin123
-    passwordHash: '$2b$10$S4rilO7yYF0KWuG0NPSRTujWWsjrOSh75oCpotGJ5cM8A0AYrTSyW',
-    role: 'admin'
-  }
-];
+export function requireRole(allowedRoles) {
+  const roles = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
+  
+  return (req, res, next) => {
+    if (!req.session || !req.session.user) {
+      logger.warn('🚫 Acceso sin autenticación a ruta protegida');
+      return res.status(401).json({ 
+        success: false, 
+        error: 'No autenticado' 
+      });
+    }
+
+    const userRole = req.session.user.Rol || req.session.user.role;
+    if (!roles.includes(userRole)) {
+      logger.warn('🚫 Usuario %s (rol: %s) intentó acceder a ruta que requiere: %s', 
+        req.session.user.Username, userRole, roles.join(', '));
+      return res.status(403).json({ 
+        success: false, 
+        error: 'No tienes permisos para esta acción' 
+      });
+    }
+
+    next();
+  };
+}
 
 /**
- * Autentica un usuario
+ * Autentica un usuario usando la base de datos
  * @param {string} username - Nombre de usuario
  * @param {string} password - Contraseña en texto plano
+ * @param {string} ip - Dirección IP del cliente
  * @returns {Promise<Object|null>} Usuario autenticado o null
  */
-export async function authenticateUser(username, password) {
-  const user = USERS.find(u => u.username === username);
-  
-  if (!user) {
-    logger.warn('🚫 Usuario no encontrado: %s', username);
-    return null;
+export async function authenticateUser(username, password, ip = null) {
+  try {
+    const user = await userService.authenticateUser(username, password);
+    
+    if (!user) {
+      return null;
+    }
+
+    // Registrar acceso exitoso
+    if (ip) {
+      await userService.logAccess(user.UsuarioID, ip, true, 'Login exitoso');
+    }
+
+    return user;
+  } catch (err) {
+    logger.error('❌ Error en autenticación: %s', err.message);
+    throw err;
   }
-  
-  const isValid = await bcrypt.compare(password, user.passwordHash);
-  
-  if (!isValid) {
-    logger.warn('🚫 Contraseña incorrecta para usuario: %s', username);
-    return null;
-  }
-  
-  logger.info('✅ Usuario autenticado: %s', username);
-  return {
-    username: user.username,
-    role: user.role
-  };
 }
 
 /**
@@ -81,6 +97,5 @@ export async function authenticateUser(username, password) {
  * @returns {Promise<string>} Hash de la contraseña
  */
 export async function hashPassword(password) {
-  const saltRounds = 10;
-  return await bcrypt.hash(password, saltRounds);
+  return await userService.hashPassword(password);
 }
