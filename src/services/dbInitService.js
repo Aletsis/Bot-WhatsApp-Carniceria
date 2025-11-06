@@ -2,6 +2,30 @@ import sql from 'mssql';
 import logger from '../logger.js';
 
 /**
+ * Servicio de Inicialización de Base de Datos
+ * 
+ * Este servicio se encarga de:
+ * 1. Verificar la conexión a SQL Server
+ * 2. Crear la base de datos si no existe
+ * 3. Crear todas las tablas necesarias:
+ *    - Clientes
+ *    - Pedidos
+ *    - Conversaciones
+ *    - TelefonosAtencion
+ *    - Usuarios (para dashboard)
+ *    - LogAccesos (auditoría de accesos)
+ * 4. Crear índices para optimizar rendimiento
+ * 5. Insertar datos iniciales:
+ *    - Teléfonos de atención
+ *    - Usuario admin (username: admin, password: admin123)
+ * 
+ * La inicialización es automática al arrancar la app.
+ * También puede ejecutarse manualmente con: npm run init-db
+ * 
+ * @module dbInitService
+ */
+
+/**
  * Verifica si la base de datos existe
  * @param {string} dbName - Nombre de la base de datos
  * @returns {Promise<boolean>}
@@ -125,17 +149,189 @@ async function createDatabase(dbName) {
     `);
     logger.info('[DB Init] ✅ Tabla TelefonosAtencion creada');
     
-    // Insertar datos iniciales
+    // Crear tabla Usuarios
+    await pool.request().query(`
+      CREATE TABLE Usuarios (
+        UsuarioID INT IDENTITY(1,1) PRIMARY KEY,
+        Username NVARCHAR(50) UNIQUE NOT NULL,
+        PasswordHash NVARCHAR(255) NOT NULL,
+        Rol NVARCHAR(20) NOT NULL DEFAULT 'viewer',
+        Nombre NVARCHAR(100) NULL,
+        Email NVARCHAR(100) NULL,
+        Activo BIT NOT NULL DEFAULT 1,
+        FechaCreacion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        UltimoAcceso DATETIME2 NULL,
+        CreadoPor NVARCHAR(50) NULL,
+        CONSTRAINT CK_Usuarios_Rol CHECK (Rol IN ('admin', 'editor', 'viewer'))
+      )
+    `);
+    logger.info('[DB Init] ✅ Tabla Usuarios creada');
+    
+    // Crear índices para Usuarios
+    await pool.request().query(`
+      CREATE INDEX IX_Usuarios_Username ON Usuarios(Username);
+      CREATE INDEX IX_Usuarios_Activo ON Usuarios(Activo);
+    `);
+    logger.info('[DB Init] ✅ Índices de Usuarios creados');
+    
+    // Crear tabla LogAccesos
+    await pool.request().query(`
+      CREATE TABLE LogAccesos (
+        LogID BIGINT IDENTITY(1,1) PRIMARY KEY,
+        UsuarioID INT NOT NULL FOREIGN KEY REFERENCES Usuarios(UsuarioID),
+        FechaHora DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        IP NVARCHAR(50) NULL,
+        Exitoso BIT NOT NULL DEFAULT 1,
+        Detalles NVARCHAR(500) NULL
+      )
+    `);
+    logger.info('[DB Init] ✅ Tabla LogAccesos creada');
+    
+    // Crear índices para LogAccesos
+    await pool.request().query(`
+      CREATE INDEX IX_LogAccesos_UsuarioID ON LogAccesos(UsuarioID);
+      CREATE INDEX IX_LogAccesos_FechaHora ON LogAccesos(FechaHora DESC);
+    `);
+    logger.info('[DB Init] ✅ Índices de LogAccesos creados');
+    
+    // Crear índices adicionales para mejorar rendimiento
+    await pool.request().query(`
+      CREATE INDEX IX_Pedidos_ClienteID ON Pedidos(ClienteID);
+      CREATE INDEX IX_Pedidos_Estado ON Pedidos(Estado);
+      CREATE INDEX IX_Pedidos_Fecha ON Pedidos(Fecha);
+      CREATE INDEX IX_Conversaciones_UltimaInteraccion ON Conversaciones(UltimaInteraccion);
+    `);
+    logger.info('[DB Init] ✅ Índices adicionales creados');
+    
+    // Insertar datos iniciales en TelefonosAtencion
     await pool.request().query(`
       INSERT INTO TelefonosAtencion (Etiqueta, Telefono) 
       VALUES ('Sucursal 8','8145678901'), ('Atencion Precios','8198765432')
     `);
-    logger.info('[DB Init] ✅ Datos iniciales insertados');
+    logger.info('[DB Init] ✅ Datos iniciales de TelefonosAtencion insertados');
+    
+    // Insertar usuario admin por defecto
+    await pool.request().query(`
+      INSERT INTO Usuarios (Username, PasswordHash, Rol, Nombre, Email, Activo, CreadoPor)
+      VALUES (
+        'admin',
+        '$2b$10$S4rilO7yYF0KWuG0NPSRTujWWsjrOSh75oCpotGJ5cM8A0AYrTSyW',
+        'admin',
+        'Administrador',
+        'admin@carniceria.com',
+        1,
+        'SYSTEM'
+      )
+    `);
+    logger.info('[DB Init] ✅ Usuario admin creado (password: admin123)');
+    logger.warn('[DB Init] ⚠️  IMPORTANTE: Cambiar la contraseña del admin en producción');
     
     logger.info('[DB Init] 🎉 Base de datos inicializada completamente');
     
   } catch (err) {
     logger.error('[DB Init] ❌ Error creando base de datos:', err.message);
+    throw err;
+  } finally {
+    if (pool) await pool.close();
+  }
+}
+
+/**
+ * Crea tablas faltantes en una base de datos existente
+ * @param {string} dbName - Nombre de la base de datos
+ * @param {string[]} missingTables - Array de nombres de tablas faltantes
+ */
+async function createMissingTables(dbName, missingTables) {
+  const config = {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASS,
+    server: process.env.DB_HOST,
+    port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
+    database: dbName,
+    options: {
+      encrypt: false,
+      trustServerCertificate: true
+    }
+  };
+
+  let pool;
+  try {
+    pool = await sql.connect(config);
+    logger.info('[DB Init] 🔨 Creando tablas faltantes...');
+    
+    for (const tableName of missingTables) {
+      switch (tableName) {
+        case 'Usuarios':
+          await pool.request().query(`
+            CREATE TABLE Usuarios (
+              UsuarioID INT IDENTITY(1,1) PRIMARY KEY,
+              Username NVARCHAR(50) UNIQUE NOT NULL,
+              PasswordHash NVARCHAR(255) NOT NULL,
+              Rol NVARCHAR(20) NOT NULL DEFAULT 'viewer',
+              Nombre NVARCHAR(100) NULL,
+              Email NVARCHAR(100) NULL,
+              Activo BIT NOT NULL DEFAULT 1,
+              FechaCreacion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+              UltimoAcceso DATETIME2 NULL,
+              CreadoPor NVARCHAR(50) NULL,
+              CONSTRAINT CK_Usuarios_Rol CHECK (Rol IN ('admin', 'editor', 'viewer'))
+            )
+          `);
+          await pool.request().query(`
+            CREATE INDEX IX_Usuarios_Username ON Usuarios(Username);
+            CREATE INDEX IX_Usuarios_Activo ON Usuarios(Activo);
+          `);
+          // Insertar usuario admin por defecto
+          await pool.request().query(`
+            INSERT INTO Usuarios (Username, PasswordHash, Rol, Nombre, Email, Activo, CreadoPor)
+            VALUES (
+              'admin',
+              '$2b$10$S4rilO7yYF0KWuG0NPSRTujWWsjrOSh75oCpotGJ5cM8A0AYrTSyW',
+              'admin',
+              'Administrador',
+              'admin@carniceria.com',
+              1,
+              'SYSTEM'
+            )
+          `);
+          logger.info('[DB Init] ✅ Tabla Usuarios creada con usuario admin');
+          break;
+          
+        case 'LogAccesos':
+          // Verificar que Usuarios existe primero
+          const usuariosExists = await pool.request().query(`
+            SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Usuarios'
+          `);
+          if (usuariosExists.recordset[0].cnt === 0) {
+            logger.warn('[DB Init] ⚠️  No se puede crear LogAccesos sin tabla Usuarios');
+            continue;
+          }
+          
+          await pool.request().query(`
+            CREATE TABLE LogAccesos (
+              LogID BIGINT IDENTITY(1,1) PRIMARY KEY,
+              UsuarioID INT NOT NULL FOREIGN KEY REFERENCES Usuarios(UsuarioID),
+              FechaHora DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+              IP NVARCHAR(50) NULL,
+              Exitoso BIT NOT NULL DEFAULT 1,
+              Detalles NVARCHAR(500) NULL
+            )
+          `);
+          await pool.request().query(`
+            CREATE INDEX IX_LogAccesos_UsuarioID ON LogAccesos(UsuarioID);
+            CREATE INDEX IX_LogAccesos_FechaHora ON LogAccesos(FechaHora DESC);
+          `);
+          logger.info('[DB Init] ✅ Tabla LogAccesos creada');
+          break;
+          
+        default:
+          logger.warn('[DB Init] ⚠️  No hay script de creación para tabla: %s', tableName);
+      }
+    }
+    
+    logger.info('[DB Init] ✅ Tablas faltantes creadas');
+  } catch (err) {
+    logger.error('[DB Init] ❌ Error creando tablas faltantes:', err.message);
     throw err;
   } finally {
     if (pool) await pool.close();
@@ -166,10 +362,32 @@ async function checkTablesExist(dbName) {
     const result = await pool.request().query(`
       SELECT COUNT(*) as TableCount 
       FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion')
+      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos')
     `);
     
-    return result.recordset[0].TableCount === 4;
+    const expectedTables = 6; // Ahora esperamos 6 tablas
+    const foundTables = result.recordset[0].TableCount;
+    
+    if (foundTables < expectedTables) {
+      logger.warn('[DB Init] ⚠️  Encontradas %d de %d tablas esperadas', foundTables, expectedTables);
+      
+      // Verificar cuáles tablas faltan
+      const tablesCheck = await pool.request().query(`
+        SELECT TABLE_NAME 
+        FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos')
+      `);
+      
+      const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
+      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos'];
+      const missingTables = allTables.filter(t => !existingTables.includes(t));
+      
+      if (missingTables.length > 0) {
+        logger.warn('[DB Init] 📋 Tablas faltantes: %s', missingTables.join(', '));
+      }
+    }
+    
+    return foundTables === expectedTables;
   } catch (err) {
     logger.error('[DB Init] Error verificando tablas:', err.message);
     return false;
@@ -206,11 +424,42 @@ export async function initializeDatabase() {
     const tablesExist = await checkTablesExist(dbName);
     
     if (!tablesExist) {
-      logger.warn('[DB Init] ⚠️  Algunas tablas faltan, recreando estructura...');
-      // Aquí podrías implementar lógica para crear solo las tablas faltantes
-      // Por ahora, loguear advertencia
-      logger.warn('[DB Init] ⚠️  Por favor, ejecute manualmente el script de migración');
-      return false;
+      logger.warn('[DB Init] ⚠️  Algunas tablas faltan, intentando crearlas...');
+      
+      // Obtener lista de tablas faltantes
+      const config = {
+        user: process.env.DB_USER,
+        password: process.env.DB_PASS,
+        server: process.env.DB_HOST,
+        port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : undefined,
+        database: dbName,
+        options: {
+          encrypt: false,
+          trustServerCertificate: true
+        }
+      };
+      
+      let pool;
+      try {
+        pool = await sql.connect(config);
+        const tablesCheck = await pool.request().query(`
+          SELECT TABLE_NAME 
+          FROM INFORMATION_SCHEMA.TABLES 
+          WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos')
+        `);
+        
+        const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
+        const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos'];
+        const missingTables = allTables.filter(t => !existingTables.includes(t));
+        
+        if (missingTables.length > 0) {
+          logger.info('[DB Init] 📋 Creando tablas: %s', missingTables.join(', '));
+          await createMissingTables(dbName, missingTables);
+          logger.info('[DB Init] ✅ Tablas creadas exitosamente');
+        }
+      } finally {
+        if (pool) await pool.close();
+      }
     }
     
     logger.info('[DB Init] ✅ Todas las tablas verificadas');

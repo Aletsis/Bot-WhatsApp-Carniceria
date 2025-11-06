@@ -34,9 +34,38 @@ Se ha migrado el sistema de autenticación de usuarios hardcodeados en el códig
 
 ## 🚀 Pasos de Migración
 
-### Paso 1: Ejecutar Migración SQL
+### Opción 1: Inicialización Automática (Recomendada)
 
-Conecta a tu SQL Server y ejecuta el script:
+El sistema ahora detecta automáticamente las tablas faltantes y las crea al iniciar.
+
+**Simplemente inicia la aplicación:**
+```bash
+npm start
+```
+
+El bot verificará:
+- ✅ Si la base de datos existe
+- ✅ Si las tablas existen
+- ✅ Creará automáticamente las tablas `Usuarios` y `LogAccesos` si no existen
+- ✅ Insertará el usuario admin por defecto
+
+**O ejecuta el script de inicialización:**
+```bash
+npm run init-db
+```
+
+Esto te mostrará información detallada sobre:
+- Usuario admin creado
+- Credenciales por defecto
+- URL del dashboard
+
+---
+
+### Opción 2: Migración Manual (Avanzado)
+
+Si prefieres ejecutar el script SQL manualmente:
+
+**Conecta a tu SQL Server y ejecuta:**
 
 ```bash
 # En SQL Server Management Studio o Azure Data Studio
@@ -53,27 +82,32 @@ Esto creará:
 - ✅ Tabla `LogAccesos` 
 - ✅ Usuario admin por defecto (username: `admin`, password: `admin123`)
 
+---
+
 ### Paso 2: Verificar que la migración fue exitosa
 
 Conecta a la BD y verifica:
 ```sql
 SELECT * FROM Usuarios;
 -- Deberías ver el usuario 'admin'
+
+SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
+WHERE TABLE_NAME IN ('Usuarios', 'LogAccesos');
+-- Deberías ver ambas tablas
 ```
 
-### Paso 3: Reiniciar la aplicación
-
-```bash
-npm start
-```
-
-### Paso 4: Probar el login
+### Paso 3: Probar el login
 
 Accede a `http://localhost:3000/login` con:
 - **Usuario**: `admin`
 - **Contraseña**: `admin123`
 
 ⚠️ **IMPORTANTE**: Cambia la contraseña del admin en producción
+
+```bash
+npm run manage-users
+# Seleccionar opción 3: Cambiar contraseña
+```
 
 ---
 
