@@ -1,6 +1,8 @@
 import escpos from 'escpos';
 const Network = escpos.Network;
 import logger from '../logger.js';
+import sql from 'mssql';
+import { getPool } from './dbService.js';
 
 /**
  * Servicio de Impresión ESC/POS
@@ -15,6 +17,37 @@ import logger from '../logger.js';
  * 
  * @module printingService
  */
+
+/**
+ * Actualiza el estado de impresión de un pedido en la BD
+ * @param {number} pedidoID - ID del pedido
+ * @param {string} estado - Estado de impresión ('Pendiente', 'Impreso', 'Error', 'NoRequerida', 'Reimprimiendo')
+ * @param {string} [error] - Mensaje de error (opcional, solo para estado 'Error')
+ * @returns {Promise<void>}
+ * @private
+ */
+async function updatePrintStatus(pedidoID, estado, error = null) {
+  try {
+    const pool = await getPool();
+    
+    await pool.request()
+      .input('PedidoID', sql.Int, pedidoID)
+      .input('EstadoImpresion', sql.NVarChar, estado)
+      .input('FechaImpresion', sql.DateTime2, new Date())
+      .input('ErrorImpresion', sql.NVarChar, error)
+      .query(`
+        UPDATE Pedidos 
+        SET EstadoImpresion = @EstadoImpresion,
+            FechaImpresion = @FechaImpresion,
+            ErrorImpresion = @ErrorImpresion
+        WHERE PedidoID = @PedidoID
+      `);
+    
+    logger.debug('💾 Estado de impresión actualizado: Pedido %d → %s', pedidoID, estado);
+  } catch (err) {
+    logger.error('❌ Error actualizando estado de impresión:', err.message);
+  }
+}
 
 /**
  * Abre la conexión con el dispositivo de impresión
@@ -35,6 +68,7 @@ function openDevice(device) {
  * Imprime un ticket de pedido en impresora térmica
  * 
  * @param {Object} data - Datos del pedido
+ * @param {number} data.pedidoID - ID del pedido en BD
  * @param {string} data.folio - Folio único del pedido
  * @param {string} data.cliente - Nombre del cliente
  * @param {string} data.telefono - Teléfono del cliente
@@ -50,6 +84,12 @@ export async function printTicket(data) {
   
   if (!printerEnabled) {
     logger.info('🖨️  Impresión deshabilitada (PRINTER_ENABLED=false). Ticket no impreso.');
+    
+    // Marcar como NoRequerida si hay pedidoID
+    if (data.pedidoID) {
+      await updatePrintStatus(data.pedidoID, 'NoRequerida');
+    }
+    
     return;
   }
 
@@ -108,8 +148,19 @@ export async function printTicket(data) {
 
     logger.info('✅ Ticket impreso exitosamente - Folio: %s', data.folio);
     
+    // Actualizar estado a Impreso
+    if (data.pedidoID) {
+      await updatePrintStatus(data.pedidoID, 'Impreso');
+    }
+    
   } catch (err) {
     logger.error('❌ Error al imprimir ticket - Folio: %s - Error: %s', data.folio, err.message);
+    
+    // Actualizar estado a Error con mensaje
+    if (data.pedidoID) {
+      await updatePrintStatus(data.pedidoID, 'Error', err.message);
+    }
+    
     throw err;
   }
 }

@@ -157,10 +157,13 @@ DB_PORT=1433
 # WhatsApp Business API
 WHATSAPP_API_TOKEN=tu_token_de_acceso
 WHATSAPP_PHONE_NUMBER_ID=tu_phone_number_id
-WHATSAPP_VERIFY_TOKEN=tu_token_de_verificacion
 
-# Sesión (producción)
-SESSION_SECRET=genera_una_clave_secreta_segura
+# Token de verificación del webhook (REQUERIDO para configurar webhook en Meta)
+WHATSAPP_VERIFY_TOKEN=tu_token_de_verificacion_personalizado
+
+# Sesión (REQUERIDO - mínimo 32 caracteres)
+# Genera uno con: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+SESSION_SECRET=tu_secret_generado_aqui_minimo_32_caracteres
 
 # Timeouts (milisegundos)
 SESSION_TIMEOUT=300000
@@ -174,6 +177,25 @@ PRINTER_PORT=9100
 # Ambiente
 NODE_ENV=development
 ```
+
+**⚠️ IMPORTANTE - Generar SESSION_SECRET:**
+
+El `SESSION_SECRET` es **obligatorio** y debe ser un string aleatorio de al menos 32 caracteres. Para generar uno seguro:
+
+```bash
+# En Windows (PowerShell)
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+# En Linux/Mac
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+**Ejemplo de output:**
+```
+a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2
+```
+
+Copia este valor y úsalo como tu `SESSION_SECRET` en el archivo `.env`.
 
 ### 4. Inicializar Base de Datos
 

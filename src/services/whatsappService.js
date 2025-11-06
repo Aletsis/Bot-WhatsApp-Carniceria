@@ -1,4 +1,5 @@
 import axios from 'axios';
+import axiosRetry from 'axios-retry';
 import dotenv from 'dotenv';
 import dbService from '../services/dbService.js';
 import logger from '../logger.js';
@@ -14,6 +15,43 @@ function assertEnv() {
   if (!PHONE_ID) throw new Error('PHONE_ID no está definido en .env');
 }
 assertEnv();
+
+// Configurar reintentos automáticos para axios
+axiosRetry(axios, {
+  retries: 3, // Máximo 3 reintentos
+  retryDelay: axiosRetry.exponentialDelay, // Delay exponencial: 1s, 2s, 4s
+  retryCondition: (error) => {
+    // Reintentar solo en casos específicos
+    if (!error.response) {
+      // Sin respuesta (timeout, network error)
+      logger.warn('🔄 Sin respuesta de WhatsApp API - Reintentando...');
+      return true;
+    }
+    
+    const status = error.response.status;
+    
+    // Reintentar solo errores 5xx (servidor de WhatsApp caído)
+    if (status >= 500 && status < 600) {
+      logger.warn('🔄 Error 5xx de WhatsApp API (%d) - Reintentando...', status);
+      return true;
+    }
+    
+    // Reintentar en rate limit (429) después de esperar
+    if (status === 429) {
+      logger.warn('🔄 Rate limit (429) - Reintentando después de esperar...');
+      return true;
+    }
+    
+    // NO reintentar errores 4xx (excepto 429)
+    // Estos son errores del cliente que no se resolverán con reintentos
+    return false;
+  },
+  onRetry: (retryCount, error, requestConfig) => {
+    const status = error.response?.status || 'sin respuesta';
+    const url = requestConfig.url;
+    logger.warn('⚠️ Reintento %d/3 para %s (Status: %s)', retryCount, url, status);
+  }
+});
 
 async function apiSend(payload) {
     const to = payload.to;

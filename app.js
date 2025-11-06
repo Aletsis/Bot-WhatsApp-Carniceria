@@ -11,6 +11,7 @@ import authRouter from './src/routes/auth.js';
 import { getPool, getPoolInstance } from './src/services/dbService.js';
 import { initializeDatabase, checkSqlServerConnection } from './src/services/dbInitService.js';
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
+import { restoreActiveTimeouts, startCleanupJob } from './src/services/sessionTimeoutService.js';
 import logger from './src/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -19,10 +20,27 @@ const __dirname = path.dirname(__filename);
 dotenv.config();
 
 function checkEnv() {
-    const required = ['DB_HOST','DB_USER','DB_PASS','DB_NAME','PHONE_NUMBER_ID','WHATSAPP_TOKEN'];
+    const required = [
+      'DB_HOST',
+      'DB_USER',
+      'DB_PASS',
+      'DB_NAME',
+      'PHONE_NUMBER_ID',
+      'WHATSAPP_TOKEN',
+      'SESSION_SECRET',
+      'WEBHOOK_VERIFY_TOKEN'
+    ];
     const missing = required.filter(k => !process.env[k]);
     if (missing.length) {
       logger.error('❌ Faltan variables de entorno:', missing.join(', '));
+      logger.error('💡 Asegúrate de tener un archivo .env con todas las variables requeridas');
+      process.exit(1);
+    }
+    
+    // Validar longitud mínima del SESSION_SECRET
+    if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.length < 32) {
+      logger.error('❌ SESSION_SECRET debe tener al menos 32 caracteres');
+      logger.error('💡 Genera uno con: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
       process.exit(1);
     }
 }
@@ -36,13 +54,14 @@ app.set('trust proxy', isProduction ? 1 : 'loopback');
 
 // Configurar sesiones
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'carniceria-secret-key-change-in-production',
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
     secure: isProduction, // Solo HTTPS en producción
     httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000 // 24 horas
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+    sameSite: 'strict' // Protección adicional contra CSRF
   }
 }));
 
@@ -132,6 +151,13 @@ async function initApp() {
     await checkSqlServerConnection();
     await initializeDatabase();
     await getPool();
+    
+    // Restaurar timeouts activos desde BD (sobrevivir a reinicios)
+    await restoreActiveTimeouts();
+    
+    // Iniciar job de limpieza periódica de sesiones abandonadas
+    startCleanupJob();
+    
     logger.info('🚀 Aplicación inicializada correctamente');
   } catch (err) {
     logger.error('❌ Error al inicializar:', err.message);

@@ -32,11 +32,32 @@ export default function PedidosPage() {
 
   const handleUpdateEstado = async (pedidoId, nuevoEstado) => {
     try {
-      await pedidosService.updateEstado(pedidoId, nuevoEstado);
+      const response = await pedidosService.updateEstado(pedidoId, nuevoEstado);
       await loadPedidos();
-      alert('Estado actualizado correctamente');
+      
+      // Mostrar mensaje de éxito
+      alert(response.message || 'Estado actualizado correctamente');
     } catch (error) {
-      alert('Error al actualizar estado');
+      // Mostrar mensaje de error detallado
+      const errorMsg = error.response?.data?.error || error.message || 'Error al actualizar estado';
+      console.error('Error completo:', error);
+      alert(`Error: ${errorMsg}`);
+    }
+  };
+
+  const handleReimprimir = async (pedidoId) => {
+    if (!confirm('¿Deseas reimprimir este ticket?')) {
+      return;
+    }
+
+    try {
+      const response = await pedidosService.reimprimir(pedidoId);
+      await loadPedidos();
+      alert(response.message || 'Ticket reimpreso correctamente');
+    } catch (error) {
+      const errorMsg = error.response?.data?.error || error.message || 'Error al reimprimir';
+      console.error('Error completo:', error);
+      alert(`Error: ${errorMsg}`);
     }
   };
 
@@ -48,6 +69,26 @@ export default function PedidosPage() {
       'Cancelado': 'danger',
     };
     return <Badge variant={variants[estado] || 'default'}>{estado}</Badge>;
+  };
+
+  const getEstadoImpresionBadge = (estadoImpresion) => {
+    if (!estadoImpresion) return null;
+    
+    const config = {
+      'Pendiente': { variant: 'warning', icon: '⏳', label: 'Impresión pendiente' },
+      'Impreso': { variant: 'success', icon: '✅', label: 'Impreso' },
+      'Error': { variant: 'danger', icon: '❌', label: 'Error de impresión' },
+      'NoRequerida': { variant: 'default', icon: 'ℹ️', label: 'No requiere impresión' },
+      'Reimprimiendo': { variant: 'info', icon: '🔄', label: 'Reimprimiendo...' },
+    };
+    
+    const info = config[estadoImpresion] || { variant: 'default', icon: '❓', label: estadoImpresion };
+    
+    return (
+      <Badge variant={info.variant} className="text-xs">
+        {info.icon} {info.label}
+      </Badge>
+    );
   };
 
   const viewDetails = (pedido) => {
@@ -138,6 +179,7 @@ export default function PedidosPage() {
                         {pedido.Folio}
                       </h3>
                       {getEstadoBadge(pedido.Estado)}
+                      {pedido.EstadoImpresion && getEstadoImpresionBadge(pedido.EstadoImpresion)}
                     </div>
                     <div className="space-y-1 text-xs sm:text-sm text-gray-600">
                       <p>
@@ -173,6 +215,16 @@ export default function PedidosPage() {
                     >
                       Ver Detalles
                     </Button>
+                    {isEditor && (pedido.EstadoImpresion === 'Error' || pedido.EstadoImpresion === 'Pendiente') && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleReimprimir(pedido.PedidoID)}
+                        className="flex-1 sm:flex-none"
+                      >
+                        🖨️ Reimprimir
+                      </Button>
+                    )}
                     {isEditor && pedido.Estado !== 'Entregado' && pedido.Estado !== 'Cancelado' && (
                       <Select
                         value={pedido.Estado}
@@ -213,9 +265,31 @@ export default function PedidosPage() {
           <div className="space-y-3 sm:space-y-4">
             <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
               <p className="text-xs sm:text-sm font-medium text-gray-500 mb-2">Estado del Pedido</p>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 {getEstadoBadge(selectedPedido.Estado)}
+                {selectedPedido.EstadoImpresion && getEstadoImpresionBadge(selectedPedido.EstadoImpresion)}
               </div>
+              
+              {/* Mostrar botón de reimprimir en el modal si hay error */}
+              {isEditor && (selectedPedido.EstadoImpresion === 'Error' || selectedPedido.EstadoImpresion === 'Pendiente') && (
+                <div className="mt-3">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      handleReimprimir(selectedPedido.PedidoID);
+                      setShowModal(false);
+                    }}
+                  >
+                    🖨️ Reimprimir Ticket
+                  </Button>
+                  {selectedPedido.ErrorImpresion && (
+                    <p className="text-xs text-red-600 mt-2">
+                      Error: {selectedPedido.ErrorImpresion}
+                    </p>
+                  )}
+                </div>
+              )}
               
               {/* Selector de cambio de estado */}
               {selectedPedido.Estado !== 'Entregado' && selectedPedido.Estado !== 'Cancelado' && (

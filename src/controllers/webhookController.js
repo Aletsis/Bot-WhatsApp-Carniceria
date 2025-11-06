@@ -19,9 +19,21 @@ export async function verifyWebhookHandler(req, res) {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
+  // Verificar que WEBHOOK_VERIFY_TOKEN esté configurado
+  if (!process.env.WEBHOOK_VERIFY_TOKEN) {
+    logger.error('❌ WEBHOOK_VERIFY_TOKEN no está configurado en .env');
+    return res.status(500).json({ 
+      error: 'Server configuration error',
+      message: 'WEBHOOK_VERIFY_TOKEN not configured' 
+    });
+  }
+
   if (mode === 'subscribe' && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+    logger.info('✅ Webhook verificado exitosamente');
     return res.status(200).send(challenge);
   }
+  
+  logger.warn('⚠️ Intento de verificación de webhook fallido - Token: %s', token);
   return res.sendStatus(403);
 }
 

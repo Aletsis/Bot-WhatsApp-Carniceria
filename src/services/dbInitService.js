@@ -122,7 +122,11 @@ async function createDatabase(dbName) {
         Contenido NVARCHAR(MAX) NOT NULL,
         Estado NVARCHAR(50) NOT NULL DEFAULT 'En espera de surtir',
         Fecha DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-        Notas NVARCHAR(1000) NULL
+        Notas NVARCHAR(1000) NULL,
+        EstadoImpresion NVARCHAR(50) NOT NULL DEFAULT 'Pendiente',
+        FechaImpresion DATETIME2 NULL,
+        ErrorImpresion NVARCHAR(500) NULL,
+        CONSTRAINT CK_Pedidos_EstadoImpresion CHECK (EstadoImpresion IN ('Pendiente', 'Impreso', 'Error', 'NoRequerida', 'Reimprimiendo'))
       )
     `);
     logger.info('[DB Init] ✅ Tabla Pedidos creada');
@@ -134,7 +138,8 @@ async function createDatabase(dbName) {
         Estado NVARCHAR(50) NOT NULL,
         Buffer NVARCHAR(MAX) NULL,
         NombreTemporal NVARCHAR(200) NULL,
-        UltimaInteraccion DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+        UltimaInteraccion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        TimeoutExpiraEn DATETIME2 NULL
       )
     `);
     logger.info('[DB Init] ✅ Tabla Conversaciones creada');
@@ -199,9 +204,18 @@ async function createDatabase(dbName) {
       CREATE INDEX IX_Pedidos_ClienteID ON Pedidos(ClienteID);
       CREATE INDEX IX_Pedidos_Estado ON Pedidos(Estado);
       CREATE INDEX IX_Pedidos_Fecha ON Pedidos(Fecha);
+      CREATE INDEX IX_Pedidos_EstadoImpresion ON Pedidos(EstadoImpresion);
       CREATE INDEX IX_Conversaciones_UltimaInteraccion ON Conversaciones(UltimaInteraccion);
     `);
     logger.info('[DB Init] ✅ Índices adicionales creados');
+    
+    // Crear índice filtrado para timeouts activos
+    await pool.request().query(`
+      CREATE INDEX IX_Conversaciones_TimeoutExpiraEn 
+      ON Conversaciones(TimeoutExpiraEn)
+      WHERE TimeoutExpiraEn IS NOT NULL;
+    `);
+    logger.info('[DB Init] ✅ Índice de timeouts creado');
     
     // Insertar datos iniciales en TelefonosAtencion
     await pool.request().query(`

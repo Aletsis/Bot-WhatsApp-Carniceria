@@ -1,14 +1,65 @@
 import SessionService from './sessionService.js';
 import WhatsappService from './whatsappService.js';
 import logger from '../logger.js';
+import sql from 'mssql';
+import { getPool } from './dbService.js';
 
-// Almacenar timeouts activos por número de teléfono
+// Almacenar timeouts activos por número de teléfono (en memoria para velocidad)
 const activeTimeouts = new Map();
 const warningTimeouts = new Map();
 
 // Configuración de tiempos (en milisegundos)
 const WARNING_TIME = 4 * 60 * 1000; // 4 minutos - advertencia
 const CANCEL_TIME = 5 * 60 * 1000;  // 5 minutos - cancelación
+
+// Intervalo para limpieza de sesiones abandonadas (cada hora)
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hora
+
+/**
+ * Guarda la fecha de expiración del timeout en la BD
+ * @param {string} from - Número de teléfono
+ */
+async function saveTimeoutExpiration(from) {
+  try {
+    const pool = await getPool();
+    const expiraEn = new Date(Date.now() + CANCEL_TIME);
+    
+    await pool.request()
+      .input('NumeroTelefono', sql.NVarChar, from)
+      .input('TimeoutExpiraEn', sql.DateTime2, expiraEn)
+      .query(`
+        UPDATE Conversaciones 
+        SET TimeoutExpiraEn = @TimeoutExpiraEn
+        WHERE NumeroTelefono = @NumeroTelefono
+      `);
+    
+    logger.debug('💾 Timeout guardado en BD para %s (expira: %s)', from, expiraEn.toISOString());
+  } catch (err) {
+    logger.error('❌ Error guardando timeout en BD:', err.message);
+  }
+}
+
+/**
+ * Limpia el timeout de la BD
+ * @param {string} from - Número de teléfono
+ */
+async function clearTimeoutExpiration(from) {
+  try {
+    const pool = await getPool();
+    
+    await pool.request()
+      .input('NumeroTelefono', sql.NVarChar, from)
+      .query(`
+        UPDATE Conversaciones 
+        SET TimeoutExpiraEn = NULL
+        WHERE NumeroTelefono = @NumeroTelefono
+      `);
+    
+    logger.debug('🗑️  Timeout limpiado de BD para %s', from);
+  } catch (err) {
+    logger.error('❌ Error limpiando timeout en BD:', err.message);
+  }
+}
 
 /**
  * Mensajes de advertencia según el estado
@@ -48,6 +99,11 @@ export function startSessionTimeout(from, state) {
   
   const numeroCorregido = from.slice(0, 2) + from.slice(3);
   
+  // Guardar timeout en BD
+  saveTimeoutExpiration(from).catch(err => 
+    logger.error('Error guardando timeout:', err)
+  );
+  
   // Programar advertencia después de 4 minutos
   const warningTimer = setTimeout(async () => {
     try {
@@ -78,6 +134,9 @@ export function startSessionTimeout(from, state) {
           Buffer: null, 
           NombreTemporal: null 
         });
+        
+        // Limpiar timeout de BD
+        await clearTimeoutExpiration(from);
         
         // Enviar mensaje de cancelación
         const cancelMsg = CANCEL_MESSAGES[state] || CANCEL_MESSAGES.MENU;
@@ -118,6 +177,11 @@ export function clearSessionTimeout(from) {
     activeTimeouts.delete(from);
   }
   
+  // Limpiar de BD
+  clearTimeoutExpiration(from).catch(err => 
+    logger.error('Error limpiando timeout de BD:', err)
+  );
+  
   logger.debug('⏱️  Timeouts limpiados para %s', from);
 }
 
@@ -142,9 +206,115 @@ export function getActiveTimeouts() {
   };
 }
 
+/**
+ * Restaura los timeouts activos desde la BD al iniciar el servidor
+ * Esto permite sobrevivir a reinicios del servidor
+ */
+export async function restoreActiveTimeouts() {
+  try {
+    const pool = await getPool();
+    
+    const result = await pool.request().query(`
+      SELECT NumeroTelefono, Estado, TimeoutExpiraEn
+      FROM Conversaciones
+      WHERE TimeoutExpiraEn IS NOT NULL 
+        AND TimeoutExpiraEn > SYSDATETIME()
+        AND Estado != 'START'
+    `);
+    
+    logger.info('🔄 Restaurando %d timeouts activos desde BD...', result.recordset.length);
+    
+    for (const row of result.recordset) {
+      const { NumeroTelefono, Estado, TimeoutExpiraEn } = row;
+      const timeRemaining = new Date(TimeoutExpiraEn).getTime() - Date.now();
+      
+      if (timeRemaining > 0) {
+        // Reiniciar timeout con el tiempo restante
+        startSessionTimeout(NumeroTelefono, Estado);
+        logger.debug('✅ Timeout restaurado para %s (estado: %s, restante: %dms)', 
+          NumeroTelefono, Estado, timeRemaining);
+      } else {
+        // Si ya expiró, limpiar
+        await clearTimeoutExpiration(NumeroTelefono);
+      }
+    }
+    
+    logger.info('✅ Timeouts restaurados correctamente');
+  } catch (err) {
+    logger.error('❌ Error restaurando timeouts:', err.message);
+  }
+}
+
+/**
+ * Limpia sesiones abandonadas (timeouts expirados en BD)
+ * Se ejecuta periódicamente para mantener la BD limpia
+ */
+export async function cleanupAbandonedSessions() {
+  try {
+    const pool = await getPool();
+    
+    // Buscar sesiones con timeout expirado
+    const result = await pool.request().query(`
+      SELECT NumeroTelefono, Estado
+      FROM Conversaciones
+      WHERE TimeoutExpiraEn IS NOT NULL 
+        AND TimeoutExpiraEn <= SYSDATETIME()
+    `);
+    
+    if (result.recordset.length > 0) {
+      logger.info('🧹 Limpiando %d sesiones abandonadas...', result.recordset.length);
+      
+      for (const row of result.recordset) {
+        const { NumeroTelefono, Estado } = row;
+        
+        // Resetear sesión a START
+        await pool.request()
+          .input('NumeroTelefono', sql.NVarChar, NumeroTelefono)
+          .query(`
+            UPDATE Conversaciones 
+            SET Estado = 'START', 
+                Buffer = NULL, 
+                NombreTemporal = NULL,
+                TimeoutExpiraEn = NULL
+            WHERE NumeroTelefono = @NumeroTelefono
+          `);
+        
+        logger.info('🗑️  Sesión limpiada para %s (estado anterior: %s)', NumeroTelefono, Estado);
+      }
+      
+      logger.info('✅ Limpieza de sesiones completada');
+    }
+  } catch (err) {
+    logger.error('❌ Error limpiando sesiones abandonadas:', err.message);
+  }
+}
+
+/**
+ * Inicia el proceso de limpieza periódica de sesiones abandonadas
+ * Se ejecuta cada hora
+ */
+export function startCleanupJob() {
+  // Ejecutar limpieza inmediatamente al iniciar
+  cleanupAbandonedSessions().catch(err => 
+    logger.error('Error en limpieza inicial:', err)
+  );
+  
+  // Programar ejecución periódica cada hora
+  setInterval(() => {
+    cleanupAbandonedSessions().catch(err => 
+      logger.error('Error en limpieza periódica:', err)
+    );
+  }, CLEANUP_INTERVAL);
+  
+  logger.info('🕐 Job de limpieza de sesiones iniciado (intervalo: 1 hora)');
+}
+
 export default {
   startSessionTimeout,
   clearSessionTimeout,
   resetSessionTimeout,
-  getActiveTimeouts
+  getActiveTimeouts,
+  restoreActiveTimeouts,
+  cleanupAbandonedSessions,
+  startCleanupJob
 };

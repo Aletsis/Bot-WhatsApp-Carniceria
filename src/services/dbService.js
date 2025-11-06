@@ -4,6 +4,60 @@ import logger from '../logger.js';
 
 let poolPromise = null;
 let poolInstance = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 5000; // 5 segundos
+
+/**
+ * Intenta reconectar a la base de datos con backoff exponencial
+ */
+async function attemptReconnection() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    logger.error('[DB] Máximo de intentos de reconexión alcanzado (%d)', MAX_RECONNECT_ATTEMPTS);
+    return;
+  }
+  
+  reconnectAttempts++;
+  const delay = RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts - 1);
+  
+  logger.warn('[DB] Intento de reconexión %d/%d en %dms...', 
+    reconnectAttempts, MAX_RECONNECT_ATTEMPTS, delay);
+  
+  setTimeout(async () => {
+    try {
+      await getPool();
+      logger.info('[DB] ✅ Reconexión exitosa');
+      reconnectAttempts = 0; // Resetear contador al reconectar exitosamente
+    } catch (err) {
+      logger.error('[DB] ❌ Reconexión fallida:', err.message);
+      await attemptReconnection();
+    }
+  }, delay);
+}
+
+/**
+ * Configura listeners de eventos del pool
+ */
+function setupPoolListeners(pool) {
+  // Evento cuando hay un error de conexión
+  pool.on('error', err => {
+    logger.error('[DB] ⚠️ Error de conexión detectado:', err.message);
+    
+    // Resetear referencias del pool
+    poolPromise = null;
+    poolInstance = null;
+    
+    // Intentar reconectar automáticamente
+    attemptReconnection();
+  });
+  
+  // Evento cuando el pool se cierra
+  pool.on('close', () => {
+    logger.warn('[DB] Pool cerrado');
+    poolPromise = null;
+    poolInstance = null;
+  });
+}
 
 export async function getPool() {
   if (poolPromise) return poolPromise;
@@ -16,7 +70,15 @@ export async function getPool() {
     database: process.env.DB_NAME,
     options: {
       encrypt: false,
-      trustServerCertificate: true
+      trustServerCertificate: true,
+      enableArithAbort: true,
+      requestTimeout: 30000, // 30 segundos
+      connectionTimeout: 30000 // 30 segundos
+    },
+    pool: {
+      max: 10,
+      min: 0,
+      idleTimeoutMillis: 30000
     }
   };
 
@@ -25,7 +87,12 @@ export async function getPool() {
   poolPromise = sql.connect(config)
     .then(pool => {
       poolInstance = pool;
+      reconnectAttempts = 0; // Resetear contador al conectar exitosamente
       logger.info('[DB] Conectado correctamente');
+      
+      // Configurar listeners de eventos
+      setupPoolListeners(pool);
+      
       return pool;
     })
     .catch(err => {

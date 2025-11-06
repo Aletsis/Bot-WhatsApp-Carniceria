@@ -39,6 +39,11 @@ export const pedidosService = {
     });
     return response.data;
   },
+
+  reimprimir: async (id) => {
+    const response = await axios.post(`/dashboard/pedidos/${id}/reimprimir`);
+    return response.data;
+  },
 };
 
 export const clientesService = {

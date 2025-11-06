@@ -1,7 +1,9 @@
+import sql from 'mssql';
 import { getPool } from '../services/dbService.js';
 import * as userService from '../services/userService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
+import { printTicket, isPrintingEnabled } from '../services/printingService.js';
 
 /**
  * Verifica si el usuario está autenticado
@@ -69,17 +71,27 @@ export async function getPedidosRecientes(req, res) {
     const fechaInicio = req.query.fechaInicio || '';
     const fechaFin = req.query.fechaFin || '';
     
-    logger.info('Pool obtenido, ejecutando query con limit:', limit, 'estado:', estado, 'fechaInicio:', fechaInicio, 'fechaFin:', fechaFin);
+    // Validar que limit sea un número positivo razonable
+    const validLimit = Math.min(Math.max(1, limit), 1000); // Entre 1 y 1000
     
-    // Construir la query con o sin filtros
+    logger.info('Pool obtenido, ejecutando query con limit:', validLimit, 'estado:', estado, 'fechaInicio:', fechaInicio, 'fechaFin:', fechaFin);
+    
+    // Crear request primero para usar parámetros
+    const request = pool.request();
+    request.input('limit', sql.Int, validLimit);
+    
+    // Construir la query usando parámetro para TOP
     let query = `
-      SELECT TOP (${limit})
+      SELECT TOP (@limit)
         p.PedidoID,
         p.Folio,
         p.Estado,
         p.Fecha,
         p.Contenido,
         p.Notas,
+        p.EstadoImpresion,
+        p.FechaImpresion,
+        p.ErrorImpresion,
         c.Nombre as NombreCliente,
         c.NumeroTelefono,
         c.Direccion as DireccionCliente
@@ -91,13 +103,16 @@ export async function getPedidosRecientes(req, res) {
     const conditions = [];
     if (estado) {
       conditions.push('p.Estado = @estado');
+      request.input('estado', sql.NVarChar, estado);
     }
     if (fechaInicio) {
       conditions.push('p.Fecha >= @fechaInicio');
+      request.input('fechaInicio', sql.DateTime2, fechaInicio);
     }
     if (fechaFin) {
       // Agregar un día a la fecha fin para incluir todo el día
       conditions.push('p.Fecha < DATEADD(day, 1, @fechaFin)');
+      request.input('fechaFin', sql.DateTime2, fechaFin);
     }
     
     if (conditions.length > 0) {
@@ -105,18 +120,6 @@ export async function getPedidosRecientes(req, res) {
     }
     
     query += ` ORDER BY p.Fecha DESC`;
-    
-    // Agregar parámetros
-    const request = pool.request();
-    if (estado) {
-      request.input('estado', estado);
-    }
-    if (fechaInicio) {
-      request.input('fechaInicio', fechaInicio);
-    }
-    if (fechaFin) {
-      request.input('fechaFin', fechaFin);
-    }
     
     const result = await request.query(query);
     
@@ -132,36 +135,52 @@ export async function getPedidosRecientes(req, res) {
 export async function updateEstadoPedido(req, res) {
   try {
     const { pedidoId } = req.params;
-    const { estado, notas } = req.body;
+    const { estado, nuevoEstado, notas } = req.body;
+    
+    // Aceptar tanto 'estado' como 'nuevoEstado' para compatibilidad
+    const estadoFinal = estado || nuevoEstado;
+    
+    if (!estadoFinal) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Estado es requerido' 
+      });
+    }
     
     const validStates = [
       'En espera de surtir', 
-      'En preparación', 
-      'Listo para entrega', 
+      'En ruta',
       'Entregado', 
       'Cancelado'
     ];
     
-    if (!validStates.includes(estado)) {
+    if (!validStates.includes(estadoFinal)) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Estado no válido' 
+        error: 'Estado no válido. Estados permitidos: ' + validStates.join(', ')
       });
     }
     
     const pool = await getPool();
-    await pool.request()
-      .input('pedidoId', pedidoId)
-      .input('estado', estado)
-      .input('notas', notas || null)
+    const result = await pool.request()
+      .input('pedidoId', sql.Int, parseInt(pedidoId))
+      .input('estado', sql.NVarChar, estadoFinal)
+      .input('notas', sql.NVarChar, notas || null)
       .query(`UPDATE Pedidos 
               SET Estado = @estado, Notas = @notas 
               WHERE PedidoID = @pedidoId`);
     
-    logger.info('Estado actualizado: Pedido %s → %s', pedidoId, estado);
-    res.json({ success: true });
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Pedido no encontrado' 
+      });
+    }
+    
+    logger.info('✅ Estado actualizado: Pedido %s → %s', pedidoId, estadoFinal);
+    res.json({ success: true, message: 'Estado actualizado correctamente' });
   } catch (err) {
-    logger.error('Error actualizando estado:', err);
+    logger.error('❌ Error actualizando estado del pedido %s:', req.params.pedidoId, err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 }
@@ -349,35 +368,63 @@ export async function getPedidosCliente(req, res) {
 }
 
 /**
- * Actualizar estado de pedido (nuevo formato)
+ * Actualizar estado de pedido (ruta /pedidos/:pedidoId/estado)
+ * Esta función maneja el endpoint que usa el frontend
  */
 export async function updateEstadoPedidoNuevo(req, res) {
   try {
     const { pedidoId } = req.params;
-    const { estado } = req.body;
+    const { estado, nuevoEstado } = req.body;
     
-    // Mapeo de estados nuevos a estados de BD
-    const estadoMap = {
-      'PENDIENTE': 'En espera de surtir',
-      'EN_PROCESO': 'En preparación',
-      'ENTREGADO': 'Entregado',
-      'CANCELADO': 'Cancelado'
-    };
+    // Aceptar tanto 'estado' como 'nuevoEstado' para compatibilidad
+    const estadoRecibido = estado || nuevoEstado;
     
-    const estadoDB = estadoMap[estado] || estado;
+    if (!estadoRecibido) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Estado es requerido' 
+      });
+    }
+    
+    // Validar estados permitidos (los que vienen del select en el frontend)
+    const validStates = [
+      'En espera de surtir', 
+      'En ruta',
+      'Entregado', 
+      'Cancelado'
+    ];
+    
+    if (!validStates.includes(estadoRecibido)) {
+      logger.warn('⚠️ Estado no válido recibido: %s', estadoRecibido);
+      return res.status(400).json({ 
+        success: false, 
+        error: `Estado no válido. Estados permitidos: ${validStates.join(', ')}`
+      });
+    }
     
     const pool = await getPool();
-    await pool.request()
-      .input('pedidoId', pedidoId)
-      .input('estado', estadoDB)
+    const result = await pool.request()
+      .input('pedidoId', sql.Int, parseInt(pedidoId))
+      .input('estado', sql.NVarChar, estadoRecibido)
       .query(`UPDATE Pedidos 
               SET Estado = @estado 
               WHERE PedidoID = @pedidoId`);
     
-    logger.info('✅ Estado actualizado: Pedido %s → %s (%s)', pedidoId, estadoDB, estado);
-    res.json({ success: true });
+    if (result.rowsAffected[0] === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Pedido no encontrado' 
+      });
+    }
+    
+    logger.info('✅ Estado actualizado: Pedido %s → %s', pedidoId, estadoRecibido);
+    res.json({ 
+      success: true, 
+      message: 'Estado actualizado correctamente'
+    });
   } catch (err) {
-    logger.error('❌ Error actualizando estado:', err);
+    logger.error('❌ Error actualizando estado del pedido %s:', req.params.pedidoId, err.message);
+    logger.error('Stack:', err.stack);
     res.status(500).json({ success: false, error: err.message });
   }
 }
@@ -522,6 +569,101 @@ export async function toggleUsuario(req, res) {
     res.json({ success: true });
   } catch (err) {
     logger.error('❌ Error toggle usuario:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Reimprime un ticket de pedido
+ */
+export async function reimprimirPedido(req, res) {
+  try {
+    const { pedidoId } = req.params;
+    
+    // Verificar si la impresión está habilitada
+    if (!isPrintingEnabled()) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Servicio de impresión deshabilitado' 
+      });
+    }
+    
+    // Obtener datos del pedido
+    const pool = await getPool();
+    const result = await pool.request()
+      .input('PedidoID', sql.Int, pedidoId)
+      .query(`
+        SELECT 
+          p.PedidoID,
+          p.Folio,
+          p.Contenido,
+          p.Fecha,
+          c.Nombre as NombreCliente,
+          c.NumeroTelefono,
+          c.Direccion
+        FROM Pedidos p
+        INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
+        WHERE p.PedidoID = @PedidoID
+      `);
+    
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Pedido no encontrado' 
+      });
+    }
+    
+    const pedido = result.recordset[0];
+    
+    // Actualizar estado a "Reimprimiendo"
+    await pool.request()
+      .input('PedidoID', sql.Int, pedidoId)
+      .query(`
+        UPDATE Pedidos 
+        SET EstadoImpresion = 'Reimprimiendo'
+        WHERE PedidoID = @PedidoID
+      `);
+    
+    // Intentar reimprimir
+    try {
+      await printTicket({
+        pedidoID: pedido.PedidoID,
+        folio: pedido.Folio,
+        cliente: pedido.NombreCliente,
+        telefono: pedido.NumeroTelefono,
+        direccion: pedido.Direccion,
+        contenido: pedido.Contenido,
+        fecha: new Date(pedido.Fecha).toLocaleString('es-MX', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        })
+      });
+      
+      logger.info('✅ Ticket reimpreso exitosamente - Folio: %s - Usuario: %s', 
+        pedido.Folio, req.session?.user?.Username);
+      
+      res.json({ 
+        success: true, 
+        message: 'Ticket reimpreso exitosamente',
+        folio: pedido.Folio
+      });
+    } catch (printError) {
+      logger.error('❌ Error al reimprimir ticket - Folio: %s - Error: %s', 
+        pedido.Folio, printError.message);
+      
+      // El estado ya se actualizó a "Error" en printTicket()
+      res.status(500).json({ 
+        success: false, 
+        error: 'Error al imprimir ticket: ' + printError.message 
+      });
+    }
+  } catch (err) {
+    logger.error('❌ Error en reimpresión:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 }

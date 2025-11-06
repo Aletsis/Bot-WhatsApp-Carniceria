@@ -1,6 +1,11 @@
 import sql from 'mssql';
 import { getPool } from './dbService.js';
 import logger from '../logger.js';
+import { 
+  isValidTransition, 
+  isCriticalState, 
+  getTransitionError 
+} from '../config/stateTransitions.js';
 
 
 // Sessions are persisted in table Conversaciones
@@ -64,10 +69,35 @@ export default {
         }
         
         // Preparar valores
-        const newEstado = updates.Estado || row.Estado || 'START';
+        const currentState = row.Estado || 'START';
+        const newEstado = updates.Estado || currentState;
         const nombreTemporal = updates.NombreTemporal !== undefined ? updates.NombreTemporal : row.NombreTemporal;
         let newBuffer = row.Buffer || null;
         if (updates.Buffer !== undefined) newBuffer = updates.Buffer;
+        
+        // 🔒 VALIDACIÓN DE TRANSICIÓN DE ESTADO
+        if (updates.Estado && currentState !== newEstado) {
+          const isValid = isValidTransition(currentState, newEstado);
+          
+          if (!isValid) {
+            // Transición inválida detectada
+            const errorMsg = getTransitionError(currentState, newEstado);
+            
+            // Si es un estado crítico, loggear como ERROR (posible bug serio)
+            if (isCriticalState(currentState) || isCriticalState(newEstado)) {
+              logger.error('🚨 TRANSICIÓN CRÍTICA INVÁLIDA: %s (tel: %s)', errorMsg, telefono);
+            } else {
+              logger.warn('⚠️ Transición inválida: %s (tel: %s)', errorMsg, telefono);
+            }
+            
+            // ⚠️ IMPORTANTE: Por ahora solo loggeamos, NO bloqueamos
+            // En futuras versiones se puede cambiar a throw Error para bloquear
+            // throw new Error(errorMsg);
+          } else {
+            // Transición válida
+            logger.debug('✅ Transición válida: %s → %s (tel: %s)', currentState, newEstado, telefono);
+          }
+        }
 
         await pool.request()
           .input('telefono', sql.NVarChar, telefono)

@@ -19,6 +19,7 @@ router.get('/', (req, res) => {
 router.get('/pedidos', dashboardController.getPedidosRecientes);
 router.put('/pedidos/:pedidoId', dashboardController.updateEstadoPedido);
 router.put('/pedidos/:pedidoId/estado', dashboardController.updateEstadoPedidoNuevo);
+router.post('/pedidos/:pedidoId/reimprimir', requireRole(['admin', 'editor']), dashboardController.reimprimirPedido);
 
 // API endpoints - Clientes
 router.get('/clientes', dashboardController.getClientes);

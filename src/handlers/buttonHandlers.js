@@ -137,12 +137,13 @@ async function handleConfirmarDireccionButton(from, session, numeroCorregido, cl
   
   // Crear pedido en base de datos
   const folio = DBService.generateFolio();
-  await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
+  const pedidoID = await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
   
   // Intentar imprimir ticket (no bloquea si falla)
   if (isPrintingEnabled()) {
     try {
       await printTicket({
+        pedidoID: pedidoID,  // ⚡ Pasar ID del pedido para rastreo de impresión
         folio: folio,
         cliente: cliente.Nombre,
         telefono: from,
