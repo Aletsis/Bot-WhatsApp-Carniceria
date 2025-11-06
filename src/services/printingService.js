@@ -78,7 +78,7 @@ export async function printTicket(data) {
       .align('ct')
       .style('bu')
       .size(1, 1)
-      .text('CARNICERÍA')
+      .text('CARNICERÍAS LA BLANQUITA')
       .text('PEDIDO')
       .style('normal')
       .text('')

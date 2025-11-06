@@ -22,10 +22,13 @@ export const authService = {
 };
 
 export const pedidosService = {
-  getAll: async (estado = '') => {
-    const response = await axios.get('/dashboard/pedidos', {
-      params: { estado },
-    });
+  getAll: async (estado = '', fechaInicio = '', fechaFin = '') => {
+    const params = {};
+    if (estado) params.estado = estado;
+    if (fechaInicio) params.fechaInicio = fechaInicio;
+    if (fechaFin) params.fechaFin = fechaFin;
+    
+    const response = await axios.get('/dashboard/pedidos', { params });
     // El backend devuelve { success: true, data: [...] }
     return response.data.data || response.data;
   },

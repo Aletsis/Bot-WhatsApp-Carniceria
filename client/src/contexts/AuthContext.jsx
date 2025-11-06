@@ -13,8 +13,9 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      const userData = await authService.checkAuth();
-      setUser(userData);
+      const response = await authService.checkAuth();
+      // La respuesta tiene la estructura {success: true, user: {...}}
+      setUser(response.user || response);
     } catch (error) {
       setUser(null);
     } finally {
@@ -53,8 +54,8 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     isAuthenticated: !!user,
-    isAdmin: user?.rol === 'admin',
-    isEditor: user?.rol === 'admin' || user?.rol === 'editor',
+    isAdmin: user?.Rol === 'admin',
+    isEditor: user?.Rol === 'admin' || user?.Rol === 'editor',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

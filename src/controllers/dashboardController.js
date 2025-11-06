@@ -65,25 +65,60 @@ export async function getPedidosRecientes(req, res) {
     logger.info('📋 Solicitando pedidos recientes...');
     const pool = await getPool();
     const limit = parseInt(req.query.limit) || 20;
+    const estado = req.query.estado || '';
+    const fechaInicio = req.query.fechaInicio || '';
+    const fechaFin = req.query.fechaFin || '';
     
-    logger.info('Pool obtenido, ejecutando query con limit:', limit);
+    logger.info('Pool obtenido, ejecutando query con limit:', limit, 'estado:', estado, 'fechaInicio:', fechaInicio, 'fechaFin:', fechaFin);
     
-    const result = await pool.request()
-      .query(`
-        SELECT TOP (${limit})
-          p.PedidoID,
-          p.Folio,
-          p.Estado,
-          p.Fecha,
-          p.Contenido,
-          p.Notas,
-          c.Nombre as NombreCliente,
-          c.NumeroTelefono,
-          c.Direccion as DireccionCliente
-        FROM Pedidos p
-        INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
-        ORDER BY p.Fecha DESC
-      `);
+    // Construir la query con o sin filtros
+    let query = `
+      SELECT TOP (${limit})
+        p.PedidoID,
+        p.Folio,
+        p.Estado,
+        p.Fecha,
+        p.Contenido,
+        p.Notas,
+        c.Nombre as NombreCliente,
+        c.NumeroTelefono,
+        c.Direccion as DireccionCliente
+      FROM Pedidos p
+      INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
+    `;
+    
+    // Construir condiciones WHERE
+    const conditions = [];
+    if (estado) {
+      conditions.push('p.Estado = @estado');
+    }
+    if (fechaInicio) {
+      conditions.push('p.Fecha >= @fechaInicio');
+    }
+    if (fechaFin) {
+      // Agregar un día a la fecha fin para incluir todo el día
+      conditions.push('p.Fecha < DATEADD(day, 1, @fechaFin)');
+    }
+    
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+    
+    query += ` ORDER BY p.Fecha DESC`;
+    
+    // Agregar parámetros
+    const request = pool.request();
+    if (estado) {
+      request.input('estado', estado);
+    }
+    if (fechaInicio) {
+      request.input('fechaInicio', fechaInicio);
+    }
+    if (fechaFin) {
+      request.input('fechaFin', fechaFin);
+    }
+    
+    const result = await request.query(query);
     
     logger.info('Query ejecutado, pedidos encontrados:', result.recordset.length);
     res.json({ success: true, data: result.recordset });

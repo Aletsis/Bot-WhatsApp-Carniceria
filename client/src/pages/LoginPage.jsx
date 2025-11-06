@@ -38,7 +38,7 @@ export default function LoginPage() {
         <div className="text-center">
           <h1 className="text-4xl font-bold text-gray-900">🥩</h1>
           <h2 className="mt-4 text-3xl font-extrabold text-gray-900">
-            Carnicería Dashboard
+            Carnicería La Blanquita
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             Inicia sesión para acceder al panel de control

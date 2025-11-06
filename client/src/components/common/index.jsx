@@ -130,30 +130,48 @@ export const Modal = ({ isOpen, onClose, title, children, footer }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+    <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div className="flex items-end sm:items-center justify-center min-h-screen px-2 sm:px-4 pt-4 pb-20 text-center sm:block sm:p-0">
         {/* Overlay */}
         <div
-          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+          className="fixed inset-0 bg-gray-900 bg-opacity-50 transition-opacity backdrop-blur-sm"
           onClick={onClose}
+          aria-hidden="true"
         ></div>
 
-        {/* Modal */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <div className="sm:flex sm:items-start">
-              <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
-                {title && (
-                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
-                    {title}
-                  </h3>
-                )}
-                <div className="mt-2">{children}</div>
+        {/* Center trick */}
+        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+        {/* Modal Panel */}
+        <div className="relative inline-block align-bottom sm:align-middle bg-white rounded-t-2xl sm:rounded-lg text-left overflow-hidden shadow-2xl transform transition-all w-full sm:my-8 sm:max-w-2xl">
+          {/* Header */}
+          {title && (
+            <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-4 sm:px-6 py-3 sm:py-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg sm:text-xl font-semibold text-white" id="modal-title">
+                  {title}
+                </h3>
+                <button
+                  onClick={onClose}
+                  className="text-white hover:text-gray-200 transition-colors p-1"
+                  aria-label="Cerrar"
+                >
+                  <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </div>
             </div>
+          )}
+
+          {/* Body */}
+          <div className="bg-white px-4 sm:px-6 py-4 sm:py-5 max-h-[70vh] sm:max-h-[80vh] overflow-y-auto">
+            {children}
           </div>
+
+          {/* Footer */}
           {footer && (
-            <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
+            <div className="bg-gray-50 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 sticky bottom-0">
               {footer}
             </div>
           )}

@@ -49,26 +49,26 @@ export default function ConversacionesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">💬 Conversaciones</h1>
-          <Button variant="primary" onClick={() => loadConversaciones()}>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">💬 Conversaciones</h1>
+          <Button variant="primary" onClick={() => loadConversaciones()} size="sm">
             🔄 Actualizar
           </Button>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Card>
-            <p className="text-sm text-gray-600">Total Conversaciones</p>
-            <p className="text-3xl font-bold text-primary-600">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
+          <Card className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-600">Total</p>
+            <p className="text-xl sm:text-3xl font-bold text-primary-600">
               {conversaciones.length}
             </p>
           </Card>
-          <Card>
-            <p className="text-sm text-gray-600">En Proceso de Pedido</p>
-            <p className="text-3xl font-bold text-green-600">
+          <Card className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-600">En Proceso</p>
+            <p className="text-xl sm:text-3xl font-bold text-green-600">
               {
                 conversaciones.filter(
                   (c) => c.Estado === 'TAKING_ORDER' || c.Estado === 'AWAITING_CONFIRM'
@@ -90,41 +90,44 @@ export default function ConversacionesPage() {
             </div>
           </Card>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-3 sm:gap-4">
             {conversaciones.map((conv) => (
-              <Card key={conv.NumeroTelefono} className="hover:shadow-lg transition-shadow">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {conv.NumeroTelefono}
-                      </h3>
-                      {getEstadoBadge(conv.Estado)}
-                    </div>
-                    <div className="space-y-2 text-sm">
+              <Card key={conv.NumeroTelefono} className="hover:shadow-lg transition-shadow p-3 sm:p-4">
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <h3 className="text-base sm:text-lg font-bold text-gray-900">
+                      <a href={`tel:${conv.NumeroTelefono}`} className="text-primary-600 hover:underline">
+                        📱 {conv.NumeroTelefono}
+                      </a>
+                    </h3>
+                    {getEstadoBadge(conv.Estado)}
+                  </div>
+                  <div className="space-y-2 text-xs sm:text-sm">
+                    <p className="text-gray-600">
+                      <strong>Estado:</strong> {getEstadoLabel(conv.Estado)}
+                    </p>
+                    {conv.NombreTemporal && (
                       <p className="text-gray-600">
-                        <strong>Estado:</strong> {getEstadoLabel(conv.Estado)}
+                        <strong>Nombre:</strong> {conv.NombreTemporal}
                       </p>
-                      {conv.NombreTemporal && (
-                        <p className="text-gray-600">
-                          <strong>Nombre:</strong> {conv.NombreTemporal}
-                        </p>
-                      )}
-                      <p className="text-gray-600">
-                        <strong>Última Interacción:</strong>{' '}
-                        {new Date(conv.UltimaInteraccion).toLocaleString('es-MX')}
-                      </p>
-                      {conv.Buffer && (
-                        <div>
-                          <p className="text-gray-600 font-semibold">Buffer:</p>
-                          <div className="mt-1 bg-gray-50 p-3 rounded text-xs">
-                            <pre className="whitespace-pre-wrap">
-                              {JSON.stringify(JSON.parse(conv.Buffer), null, 2)}
-                            </pre>
-                          </div>
+                    )}
+                    <p className="text-gray-600">
+                      <strong>Última Interacción:</strong>{' '}
+                      {new Date(conv.UltimaInteraccion).toLocaleString('es-MX', {
+                        dateStyle: 'short',
+                        timeStyle: 'short'
+                      })}
+                    </p>
+                    {conv.Buffer && (
+                      <div>
+                        <p className="text-gray-600 font-semibold mb-1">Buffer:</p>
+                        <div className="bg-gray-50 p-2 sm:p-3 rounded text-xs overflow-x-auto">
+                          <pre className="whitespace-pre-wrap break-words">
+                            {JSON.stringify(JSON.parse(conv.Buffer), null, 2)}
+                          </pre>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Card>

@@ -101,41 +101,41 @@ export default function UsuariosPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">👤 Usuarios</h1>
-          <div className="flex gap-2">
-            <Button variant="primary" onClick={() => loadUsuarios()}>
-              🔄 Actualizar
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">👤 Usuarios</h1>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="primary" onClick={() => loadUsuarios()} size="sm" className="flex-1 sm:flex-none">
+              🔄 <span className="hidden sm:inline">Actualizar</span>
             </Button>
-            <Button variant="success" onClick={openCreateModal}>
-              ➕ Nuevo Usuario
+            <Button variant="success" onClick={openCreateModal} size="sm" className="flex-1 sm:flex-none">
+              ➕ <span className="hidden sm:inline">Nuevo Usuario</span><span className="sm:hidden">Nuevo</span>
             </Button>
           </div>
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <p className="text-sm text-gray-600">Total Usuarios</p>
-            <p className="text-3xl font-bold text-primary-600">{usuarios.length}</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+          <Card className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-600">Total</p>
+            <p className="text-xl sm:text-3xl font-bold text-primary-600">{usuarios.length}</p>
           </Card>
-          <Card>
-            <p className="text-sm text-gray-600">Administradores</p>
-            <p className="text-3xl font-bold text-red-600">
+          <Card className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-600">Admins</p>
+            <p className="text-xl sm:text-3xl font-bold text-red-600">
               {usuarios.filter((u) => u.Rol === 'admin').length}
             </p>
           </Card>
-          <Card>
-            <p className="text-sm text-gray-600">Editores</p>
-            <p className="text-3xl font-bold text-yellow-600">
+          <Card className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-600">Editores</p>
+            <p className="text-xl sm:text-3xl font-bold text-yellow-600">
               {usuarios.filter((u) => u.Rol === 'editor').length}
             </p>
           </Card>
-          <Card>
-            <p className="text-sm text-gray-600">Visualizadores</p>
-            <p className="text-3xl font-bold text-blue-600">
+          <Card className="p-3 sm:p-4">
+            <p className="text-xs sm:text-sm text-gray-600">Viewers</p>
+            <p className="text-xl sm:text-3xl font-bold text-blue-600">
               {usuarios.filter((u) => u.Rol === 'viewer').length}
             </p>
           </Card>
@@ -147,81 +147,144 @@ export default function UsuariosPage() {
             <Loading size="lg" />
           </div>
         ) : (
-          <Card>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Usuario
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Nombre
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Rol
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Estado
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Último Acceso
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
-                      Acciones
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {usuarios.map((usuario) => (
-                    <tr key={usuario.UsuarioID} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                        {usuario.Username}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-900">
-                        {usuario.Nombre || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {usuario.Email || '-'}
-                      </td>
-                      <td className="px-4 py-3 text-sm">{getRolBadge(usuario.Rol)}</td>
-                      <td className="px-4 py-3 text-sm">
-                        <Badge variant={usuario.Activo ? 'success' : 'default'}>
-                          {usuario.Activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {usuario.UltimoAcceso
-                          ? new Date(usuario.UltimoAcceso).toLocaleString('es-MX')
-                          : 'Nunca'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-right space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openPasswordModal(usuario)}
-                        >
-                          🔑 Cambiar Contraseña
-                        </Button>
-                        <Button
-                          variant={usuario.Activo ? 'danger' : 'success'}
-                          size="sm"
-                          onClick={() =>
-                            handleToggleEstado(usuario.UsuarioID, usuario.Activo)
-                          }
-                        >
-                          {usuario.Activo ? '❌ Desactivar' : '✅ Activar'}
-                        </Button>
-                      </td>
+          <>
+            {/* Vista de tabla para desktop */}
+            <Card className="hidden lg:block">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Usuario
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Nombre
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Email
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Rol
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Estado
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Último Acceso
+                      </th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        Acciones
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {usuarios.map((usuario) => (
+                      <tr key={usuario.UsuarioID} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                          {usuario.Username}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-900">
+                          {usuario.Nombre || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {usuario.Email || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm">{getRolBadge(usuario.Rol)}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <Badge variant={usuario.Activo ? 'success' : 'default'}>
+                            {usuario.Activo ? 'Activo' : 'Inactivo'}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {usuario.UltimoAcceso
+                            ? new Date(usuario.UltimoAcceso).toLocaleString('es-MX')
+                            : 'Nunca'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openPasswordModal(usuario)}
+                          >
+                            🔑 Cambiar Contraseña
+                          </Button>
+                          <Button
+                            variant={usuario.Activo ? 'danger' : 'success'}
+                            size="sm"
+                            onClick={() =>
+                              handleToggleEstado(usuario.UsuarioID, usuario.Activo)
+                            }
+                          >
+                            {usuario.Activo ? '❌ Desactivar' : '✅ Activar'}
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+
+            {/* Vista de tarjetas para móvil/tablet */}
+            <div className="lg:hidden grid gap-3">
+              {usuarios.map((usuario) => (
+                <Card key={usuario.UsuarioID} className="p-3 sm:p-4">
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <h3 className="text-base sm:text-lg font-bold text-gray-900">
+                        {usuario.Username}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {usuario.Nombre || 'Sin nombre'}
+                      </p>
+                      {usuario.Email && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          ✉️ {usuario.Email}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-2 items-end">
+                      {getRolBadge(usuario.Rol)}
+                      <Badge variant={usuario.Activo ? 'success' : 'default'}>
+                        {usuario.Activo ? 'Activo' : 'Inactivo'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mb-3">
+                    <strong>Último acceso:</strong>{' '}
+                    {usuario.UltimoAcceso
+                      ? new Date(usuario.UltimoAcceso).toLocaleString('es-MX', {
+                          dateStyle: 'short',
+                          timeStyle: 'short'
+                        })
+                      : 'Nunca'}
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPasswordModal(usuario)}
+                      className="flex-1"
+                    >
+                      🔑 Cambiar Contraseña
+                    </Button>
+                    <Button
+                      variant={usuario.Activo ? 'danger' : 'success'}
+                      size="sm"
+                      onClick={() =>
+                        handleToggleEstado(usuario.UsuarioID, usuario.Activo)
+                      }
+                      className="flex-1"
+                    >
+                      {usuario.Activo ? '❌ Desactivar' : '✅ Activar'}
+                    </Button>
+                  </div>
+                </Card>
+              ))}
             </div>
-          </Card>
+          </>
         )}
       </div>
 
@@ -235,17 +298,17 @@ export default function UsuariosPage() {
             : `Cambiar Contraseña: ${selectedUsuario?.Username}`
         }
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setShowModal(false)}>
+          <div className="flex gap-2 w-full justify-end">
+            <Button variant="secondary" onClick={() => setShowModal(false)} size="sm" className="flex-1 sm:flex-none">
               Cancelar
             </Button>
-            <Button variant="primary" onClick={handleSubmit}>
+            <Button variant="primary" onClick={handleSubmit} size="sm" className="flex-1 sm:flex-none">
               {modalMode === 'create' ? 'Crear' : 'Guardar'}
             </Button>
-          </>
+          </div>
         }
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
           {modalMode === 'create' ? (
             <>
               <Input
