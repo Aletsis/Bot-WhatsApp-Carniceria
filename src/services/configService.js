@@ -53,15 +53,15 @@ export async function getAllConfigs() {
       }
       
       configs[config.Categoria].push({
-        id: config.ConfigID,
-        clave: config.Clave,
-        valor: valorMostrar,
-        valorReal: config.Tipo === 'secret' ? null : config.Valor, // No enviar secrets completos
-        descripcion: config.Descripcion,
-        tipo: config.Tipo,
-        categoria: config.Categoria,
-        editable: config.Editable,
-        fechaActualizacion: config.FechaActualizacion
+        ConfigID: config.ConfigID,
+        Clave: config.Clave,
+        Valor: valorMostrar,
+        ValorReal: config.Tipo === 'secret' ? null : config.Valor, // No enviar secrets completos
+        Descripcion: config.Descripcion,
+        Tipo: config.Tipo,
+        Categoria: config.Categoria,
+        Editable: config.Editable,
+        FechaActualizacion: config.FechaActualizacion
       });
     });
 
@@ -104,17 +104,24 @@ export async function getConfig(clave) {
     }
 
     const config = result.recordset[0];
+    
+    // Enmascarar secrets
+    let valorMostrar = config.Valor;
+    if (config.Tipo === 'secret' && config.Valor && config.Valor.length > 4) {
+      valorMostrar = '****' + config.Valor.slice(-4);
+    }
+    
     logger.debug('✅ Configuración obtenida: %s = %s', clave, config.Tipo === 'secret' ? '****' : config.Valor);
     
     return {
-      id: config.ConfigID,
-      clave: config.Clave,
-      valor: config.Valor,
-      descripcion: config.Descripcion,
-      tipo: config.Tipo,
-      categoria: config.Categoria,
-      editable: config.Editable,
-      fechaActualizacion: config.FechaActualizacion
+      ConfigID: config.ConfigID,
+      Clave: config.Clave,
+      Valor: valorMostrar,
+      Descripcion: config.Descripcion,
+      Tipo: config.Tipo,
+      Categoria: config.Categoria,
+      Editable: config.Editable,
+      FechaActualizacion: config.FechaActualizacion
     };
   } catch (error) {
     logger.error('❌ Error obteniendo configuración %s:', clave, error.message);
@@ -240,15 +247,15 @@ export async function getConfigsByCategory(categoria) {
       }
       
       return {
-        id: config.ConfigID,
-        clave: config.Clave,
-        valor: valorMostrar,
-        valorReal: config.Tipo === 'secret' ? null : config.Valor,
-        descripcion: config.Descripcion,
-        tipo: config.Tipo,
-        categoria: config.Categoria,
-        editable: config.Editable,
-        fechaActualizacion: config.FechaActualizacion
+        ConfigID: config.ConfigID,
+        Clave: config.Clave,
+        Valor: valorMostrar,
+        ValorReal: config.Tipo === 'secret' ? null : config.Valor,
+        Descripcion: config.Descripcion,
+        Tipo: config.Tipo,
+        Categoria: config.Categoria,
+        Editable: config.Editable,
+        FechaActualizacion: config.FechaActualizacion
       };
     });
 
