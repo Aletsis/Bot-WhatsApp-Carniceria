@@ -59,8 +59,8 @@ BEGIN
     ('APP_SECRET', '', 'App Secret de Meta para verificación de firma', 'secret', 'WHATSAPP', 1),
     
     -- === SYSTEM ===
-    ('SESSION_TIMEOUT', '300000', 'Timeout de sesión en milisegundos (5 min default)', 'number', 'SYSTEM', 1),
-    ('CONVERSATION_TIMEOUT', '1800000', 'Timeout de conversación en milisegundos (30 min default)', 'number', 'SYSTEM', 1),
+    ('SESSION_TIMEOUT', '5', 'Timeout de sesión en minutos (5 min default)', 'number', 'SYSTEM', 1),
+    ('CONVERSATION_TIMEOUT', '30', 'Timeout de conversación en minutos (30 min default)', 'number', 'SYSTEM', 1),
     ('SESSION_TTL_MINUTES', '1440', 'Tiempo de vida de sesión HTTP en minutos (24h default)', 'number', 'SYSTEM', 1),
     
     -- === NOTIFICATIONS ===
