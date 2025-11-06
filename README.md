@@ -37,15 +37,19 @@ Bot automatizado de WhatsApp Business para gestión de pedidos de carnicería co
 - **Gestión de estado de pedidos** (En espera, En ruta, Entregado)
 - **Impresión automática de tickets** en impresoras térmicas ESC/POS
 
-### 📊 Dashboard Web
-- **Interfaz moderna y responsive** para administración
+### 📊 Dashboard Web (React + Vite)
+- **Aplicación React moderna** con Vite como build tool
+- **Tailwind CSS v4** para diseño responsive y profesional
+- **React Router v6** para navegación con rutas protegidas
+- **Context API** para gestión de estado de autenticación
 - **Vista de pedidos en tiempo real** con filtros por estado
 - **Gestión completa de clientes** (agregar, editar, desactivar)
 - **Consulta de conversaciones** activas y historial
 - **Gestión de usuarios** con roles (admin, editor, viewer)
-- **Auditoría de accesos** al dashboard
-- **Métricas y estadísticas** de pedidos
-- **Autenticación segura** con bcrypt
+- **Métricas y estadísticas** en tiempo real
+- **Componentes reutilizables** (Button, Input, Card, Badge, Modal, etc.)
+- **Autenticación segura** con sesiones y bcrypt
+- **Hot Module Replacement (HMR)** para desarrollo rápido
 
 ### 🗄️ Base de Datos
 - **SQL Server** como motor de base de datos
@@ -123,8 +127,16 @@ cd Bot-WhatsApp-Carniceria
 
 ### 2. Instalar Dependencias
 
+#### Backend (Node.js)
 ```bash
 npm install
+```
+
+#### Frontend (React)
+```bash
+cd client
+npm install
+cd ..
 ```
 
 ### 3. Configurar Variables de Entorno
@@ -201,22 +213,46 @@ npm run manage-users
 
 ### Iniciar el Servidor
 
+#### Desarrollo (Backend + Frontend simultáneos)
 ```bash
-# Desarrollo (con auto-reload)
+# Opción 1: Con concurrently (recomendado)
+npm run dev:all
+
+# Opción 2: Servidores separados en terminales diferentes
+# Terminal 1 - Backend
 npm run dev
 
-# Producción
+# Terminal 2 - Frontend React
+npm run dev:client
+```
+
+URLs de desarrollo:
+- **Backend API**: `http://localhost:3000`
+- **Frontend React**: `http://localhost:5173`
+
+#### Producción (Build + Deploy)
+```bash
+# 1. Compilar frontend React
+npm run build:client
+
+# 2. Iniciar servidor en modo producción
 npm run prod
 ```
 
-El servidor estará disponible en: `http://localhost:3000`
+El servidor estará disponible en: `http://localhost:3000`  
+(En producción, el backend sirve el build de React automáticamente)
 
 ### Acceder al Dashboard
 
-1. Navega a: `http://localhost:3000`
+#### Desarrollo
+1. Navega a: `http://localhost:5173`
 2. Credenciales por defecto:
    - **Usuario**: `admin`
    - **Contraseña**: `admin123`
+
+#### Producción
+1. Navega a: `http://localhost:3000`
+2. Mismas credenciales
 
 ### Flujo de Conversación del Bot
 
@@ -252,6 +288,30 @@ Bot-WhatsApp-Carniceria/
 ├── README.md
 ├── LICENSE
 │
+├── client/                     # 🆕 Aplicación React (Frontend)
+│   ├── src/
+│   │   ├── api/               # Servicios API y configuración Axios
+│   │   │   ├── axios.js
+│   │   │   └── services.js
+│   │   ├── components/        # Componentes React
+│   │   │   ├── common/        # Componentes reutilizables
+│   │   │   ├── layout/        # Layout (Navbar, Sidebar)
+│   │   │   └── ProtectedRoute.jsx
+│   │   ├── contexts/          # Context API
+│   │   │   └── AuthContext.jsx
+│   │   ├── pages/             # Páginas principales
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── PedidosPage.jsx
+│   │   │   ├── ClientesPage.jsx
+│   │   │   ├── ConversacionesPage.jsx
+│   │   │   └── UsuariosPage.jsx
+│   │   ├── App.jsx            # Componente raíz con rutas
+│   │   ├── main.jsx           # Entry point React
+│   │   └── index.css          # Tailwind CSS v4
+│   ├── package.json
+│   ├── vite.config.js
+│   └── tailwind.config.js
+│
 ├── migrations/                 # Scripts SQL de migraciones
 │   ├── 01_schema.sql
 │   └── 02_usuarios_table.sql
@@ -261,7 +321,7 @@ Bot-WhatsApp-Carniceria/
 │   ├── manage-users.js        # Gestión de usuarios CLI
 │   └── generate-password.js   # Generador de hashes
 │
-└── src/
+└── src/                        # Backend (Node.js + Express)
     ├── logger.js              # Configuración de Pino logger
     │
     ├── controllers/           # Lógica de negocio
@@ -279,13 +339,6 @@ Bot-WhatsApp-Carniceria/
     ├── middleware/
     │   └── auth.js            # Middleware de autenticación
     │
-    ├── public/                # Archivos estáticos del dashboard
-    │   ├── index.html
-    │   ├── css/
-    │   │   └── dashboard.css
-    │   └── js/
-    │       └── dashboard.js
-    │
     ├── routes/                # Definición de rutas
     │   ├── auth.js            # Rutas de login/logout
     │   ├── dashboard.js       # Rutas de API del dashboard
@@ -294,6 +347,7 @@ Bot-WhatsApp-Carniceria/
     ├── services/              # Capa de servicios
     │   ├── dbService.js       # Consultas a BD
     │   ├── dbInitService.js   # Inicialización de BD
+    │   ├── printingService.js # 🆕 Impresión de tickets ESC/POS
     │   ├── sessionService.js  # Gestión de sesiones de conversación
     │   ├── sessionTimeoutService.js  # Timeouts automáticos
     │   ├── userService.js     # CRUD de usuarios
@@ -305,43 +359,170 @@ Bot-WhatsApp-Carniceria/
 
 ---
 
-## 🎨 Dashboard Web
+## 🎨 Dashboard Web (React)
 
-### Características del Dashboard
+### Stack Tecnológico Frontend
 
-#### 🔐 Autenticación
-- Login con usuario y contraseña
-- Sesiones persistentes con express-session
-- Logout manual o automático por inactividad
-- Auditoría de accesos (IP, fecha/hora, resultado)
+- **React 19**: Framework frontend moderno con hooks
+- **Vite 7.2.1**: Build tool ultra-rápido con HMR
+- **React Router v6**: Navegación con rutas protegidas
+- **Tailwind CSS v4**: Diseño responsive con utility-first CSS
+- **Axios**: Cliente HTTP con interceptores
+- **Context API**: Gestión de estado global (autenticación)
 
-#### 📊 Vista de Pedidos
-- Tabla paginada con todos los pedidos
-- Filtros por estado: Todos, En espera, En ruta, Entregado
-- Búsqueda por folio, cliente o contenido
-- Visualización de detalles completos del pedido
-- Actualización de estado de pedido
-- Indicador de pedidos nuevos en tiempo real
+### Arquitectura Frontend
 
-#### 👥 Gestión de Clientes
-- Listado completo de clientes registrados
-- Agregar nuevos clientes manualmente
-- Editar nombre y dirección
-- Desactivar clientes (soft delete)
-- Búsqueda por nombre o teléfono
+```
+client/src/
+├── api/                      # Capa de servicios API
+│   ├── axios.js             # Configuración Axios con interceptors
+│   └── services.js          # Servicios: auth, pedidos, clientes, etc.
+├── components/
+│   ├── common/              # Componentes reutilizables
+│   │   └── index.jsx        # Button, Input, Select, Card, Badge, Modal, Loading
+│   ├── layout/              # Layout components
+│   │   └── index.jsx        # Navbar, Sidebar, DashboardLayout
+│   └── ProtectedRoute.jsx   # HOC para protección de rutas
+├── contexts/
+│   └── AuthContext.jsx      # Estado global de autenticación
+├── pages/                   # Páginas principales
+│   ├── LoginPage.jsx        # Página de login
+│   ├── PedidosPage.jsx      # Gestión de pedidos
+│   ├── ClientesPage.jsx     # CRUD de clientes
+│   ├── ConversacionesPage.jsx # Vista de conversaciones
+│   └── UsuariosPage.jsx     # Administración de usuarios
+└── App.jsx                  # Configuración de rutas
+```
 
-#### 💬 Conversaciones
-- Vista de conversaciones activas
-- Historial de interacciones
-- Estado actual de cada conversación
-- Última interacción registrada
+### Características del Dashboard React
 
-#### 👤 Gestión de Usuarios (Solo Admin)
-- Crear nuevos usuarios con roles
-- Listar todos los usuarios
-- Cambiar contraseñas
-- Activar/desactivar usuarios
-- Roles disponibles: admin, editor, viewer
+#### 🔐 Sistema de Autenticación
+- **Context API** para estado global de autenticación
+- **Protected Routes** con redirección automática
+- **Verificación de sesión** al cargar la aplicación (`/api/check-auth`)
+- **Interceptores Axios** para manejo automático de 401
+- **Persistencia de sesión** con cookies httpOnly
+- **Roles y permisos** integrados en el contexto
+
+#### 📊 Página de Pedidos (`PedidosPage.jsx`)
+- **Grid responsive** con cards de pedidos
+- **Filtros interactivos** por estado (En espera, En ruta, Entregado)
+- **Modal de detalles** con información completa del pedido
+- **Actualización de estado** con dropdown (solo editores/admins)
+- **Badges de color** según estado del pedido
+- **Loading states** durante operaciones asíncronas
+
+#### 👥 Página de Clientes (`ClientesPage.jsx`)
+- **Estadísticas en tiempo real**: Total, Activos, Inactivos
+- **Tabla responsive** con todos los datos del cliente
+- **Modal de crear/editar** con formulario validado
+- **Soft delete** con botón "Desactivar" (solo editores/admins)
+- **Búsqueda y filtrado** en el frontend
+- **Estados de carga** y mensajes de error
+
+#### 💬 Página de Conversaciones (`ConversacionesPage.jsx`)
+- **Lista de conversaciones activas**
+- **Estado actual** de cada conversación
+- **Última interacción** con timestamp
+- **Información del cliente** asociado
+- **Visualización en cards** responsive
+
+#### 👤 Página de Usuarios (`UsuariosPage.jsx`) - Solo Admin
+- **Protección por rol**: Redirige si no es admin
+- **Estadísticas por rol**: Admin, Editor, Viewer
+- **Crear nuevos usuarios** con selección de rol
+- **Cambiar contraseñas** con modal dedicado
+- **Activar/Desactivar** usuarios con toggle
+- **Badges de rol** con colores distintivos
+
+### Componentes Reutilizables
+
+#### `Button`
+- Variantes: `primary`, `secondary`, `danger`, `success`, `outline`
+- Tamaños: `sm`, `md`, `lg`
+- Estados: `disabled`, `loading`
+
+#### `Input`
+- Label integrado
+- Manejo de errores
+- Tipos: `text`, `password`, `email`, etc.
+
+#### `Select`
+- Dropdown con opciones
+- Label y error display
+- Estilos Tailwind consistentes
+
+#### `Card`
+- Container con padding y shadow
+- Título opcional
+- Hover effects
+
+#### `Badge`
+- Variantes de color: `success`, `warning`, `danger`, `info`, `secondary`
+- Tamaños: `sm`, `md`, `lg`
+
+#### `Modal`
+- Overlay con backdrop
+- Header, body, footer
+- Cerrar con botón o backdrop click
+
+#### `Loading`
+- Spinner animado
+- Centrado automático
+
+### Layout Components
+
+#### `Navbar`
+- Logo y título de la aplicación
+- Información del usuario logueado
+- Botón de logout
+
+#### `Sidebar`
+- Navegación lateral con iconos
+- Links activos con highlight
+- Responsive (colapsa en móvil)
+- Links: Pedidos, Clientes, Conversaciones, Usuarios (si es admin)
+
+#### `DashboardLayout`
+- Wrapper que combina Navbar + Sidebar + Contenido
+- Manejo responsive automático
+- Espaciado y padding consistentes
+
+### Servicios API (`api/services.js`)
+
+#### `authService`
+```javascript
+login(username, password)    // POST /api/auth/login
+logout()                     // POST /api/auth/logout
+checkAuth()                  // GET /api/check-auth
+```
+
+#### `pedidosService`
+```javascript
+getAll(estado)              // GET /api/pedidos?estado=...
+updateEstado(id, estado)    // PUT /api/pedidos/:id/estado
+```
+
+#### `clientesService`
+```javascript
+getAll()                    // GET /api/clientes
+create(cliente)             // POST /api/clientes
+update(id, cliente)         // PUT /api/clientes/:id
+delete(id)                  // DELETE /api/clientes/:id
+```
+
+#### `conversacionesService`
+```javascript
+getAll()                    // GET /api/conversaciones
+```
+
+#### `usuariosService`
+```javascript
+getAll()                    // GET /api/usuarios
+create(usuario)             // POST /api/usuarios
+cambiarPassword(id, data)   // POST /api/usuarios/:id/cambiar-password
+toggle(id)                  // PUT /api/usuarios/:id/toggle
+```
 
 ### Roles y Permisos
 
@@ -352,8 +533,30 @@ Bot-WhatsApp-Carniceria/
 | Ver conversaciones | ✅ | ✅ | ✅ |
 | Actualizar estado de pedidos | ✅ | ✅ | ❌ |
 | Agregar/editar clientes | ✅ | ✅ | ❌ |
-| Gestionar usuarios | ✅ | ❌ | ❌ |
-| Ver logs de acceso | ✅ | ❌ | ❌ |
+| Desactivar clientes | ✅ | ✅ | ❌ |
+| Ver página de usuarios | ✅ | ❌ | ❌ |
+| Crear usuarios | ✅ | ❌ | ❌ |
+| Cambiar contraseñas | ✅ | ❌ | ❌ |
+| Activar/desactivar usuarios | ✅ | ❌ | ❌ |
+
+### Scripts de Desarrollo
+
+```bash
+# Backend + Frontend simultáneos (recomendado)
+npm run dev:all
+
+# Solo Backend
+npm run dev
+
+# Solo Frontend React
+npm run dev:client
+
+# Build de producción del frontend
+npm run build:client
+
+# Producción (sirve el build de React)
+npm run prod
+```
 
 ---
 
@@ -383,31 +586,107 @@ Recibe mensajes entrantes de WhatsApp Business API.
 }
 ```
 
-### Endpoints del Dashboard
+### Endpoints del Dashboard (Backend API)
 
 #### Autenticación
-- `GET /` - Página de login
-- `POST /auth/login` - Autenticar usuario
-- `POST /auth/logout` - Cerrar sesión
+- `POST /api/auth/login` - Autenticar usuario
+  ```json
+  // Request body
+  { "username": "admin", "password": "admin123" }
+  
+  // Response
+  { "success": true, "message": "Login exitoso", "user": {...} }
+  ```
+- `POST /api/auth/logout` - Cerrar sesión
+- `GET /api/check-auth` - Verificar sesión activa (sin autenticación requerida)
+  ```json
+  // Response si hay sesión
+  { "user": { "UsuarioID": 1, "Username": "admin", "Rol": "admin" } }
+  
+  // Response si no hay sesión
+  { "error": "No autenticado" } // Status 401
+  ```
 
 #### Pedidos
-- `GET /dashboard/pedidos` - Listar pedidos (filtros: estado)
-- `PUT /dashboard/pedidos/:id/estado` - Actualizar estado
+- `GET /api/pedidos?estado=En espera` - Listar pedidos con filtros opcionales
+  ```json
+  // Response
+  [
+    {
+      "PedidoID": 1,
+      "Folio": "20240101-0001",
+      "Contenido": "1kg bistec, 500g chorizo",
+      "Estado": "En espera",
+      "Fecha": "2024-01-01T10:30:00",
+      "ClienteNombre": "Juan Pérez",
+      "ClienteDireccion": "Av. Principal 123"
+    }
+  ]
+  ```
+- `PUT /api/pedidos/:id/estado` - Actualizar estado de pedido (requiere rol editor/admin)
+  ```json
+  // Request body
+  { "estado": "En ruta" }
+  ```
 
 #### Clientes
-- `GET /dashboard/clientes` - Listar clientes
-- `POST /dashboard/clientes` - Crear cliente
-- `PUT /dashboard/clientes/:id` - Actualizar cliente
-- `DELETE /dashboard/clientes/:id` - Desactivar cliente
+- `GET /api/clientes` - Listar todos los clientes
+- `POST /api/clientes` - Crear nuevo cliente (requiere rol editor/admin)
+  ```json
+  // Request body
+  {
+    "NumeroTelefono": "5218123456789",
+    "Nombre": "Juan Pérez",
+    "Direccion": "Av. Principal 123"
+  }
+  ```
+- `PUT /api/clientes/:id` - Actualizar cliente (requiere rol editor/admin)
+- `DELETE /api/clientes/:id` - Desactivar cliente (soft delete, requiere rol editor/admin)
 
 #### Conversaciones
-- `GET /dashboard/conversaciones` - Listar conversaciones activas
+- `GET /api/conversaciones` - Listar conversaciones activas
+  ```json
+  // Response
+  [
+    {
+      "NumeroTelefono": "5218123456789",
+      "Estado": "TAKING_ORDER",
+      "Buffer": "1kg bistec",
+      "NombreTemporal": "Juan Pérez",
+      "UltimaInteraccion": "2024-01-01T10:30:00"
+    }
+  ]
+  ```
 
 #### Usuarios (Solo Admin)
-- `GET /dashboard/usuarios` - Listar usuarios
-- `POST /dashboard/usuarios` - Crear usuario
-- `PUT /dashboard/usuarios/:id/password` - Cambiar contraseña
-- `PUT /dashboard/usuarios/:id/estado` - Activar/desactivar
+- `GET /api/usuarios` - Listar todos los usuarios
+  ```json
+  // Response
+  [
+    {
+      "UsuarioID": 1,
+      "Username": "admin",
+      "Rol": "admin",
+      "Activo": true,
+      "FechaCreacion": "2024-01-01T00:00:00"
+    }
+  ]
+  ```
+- `POST /api/usuarios` - Crear nuevo usuario (requiere rol admin)
+  ```json
+  // Request body
+  {
+    "username": "nuevo_usuario",
+    "password": "password123",
+    "rol": "editor"
+  }
+  ```
+- `POST /api/usuarios/:id/cambiar-password` - Cambiar contraseña (requiere rol admin)
+  ```json
+  // Request body
+  { "password": "nueva_password123" }
+  ```
+- `PUT /api/usuarios/:id/toggle` - Activar/desactivar usuario (requiere rol admin)
 
 ---
 
