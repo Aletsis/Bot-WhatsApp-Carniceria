@@ -3,14 +3,63 @@ import WhatsappService from './whatsappService.js';
 import logger from '../logger.js';
 import sql from 'mssql';
 import { getPool } from './dbService.js';
+import * as configService from './configService.js';
 
 // Almacenar timeouts activos por número de teléfono (en memoria para velocidad)
 const activeTimeouts = new Map();
 const warningTimeouts = new Map();
 
-// Configuración de tiempos (en milisegundos)
-const WARNING_TIME = 4 * 60 * 1000; // 4 minutos - advertencia
-const CANCEL_TIME = 5 * 60 * 1000;  // 5 minutos - cancelación
+// Variables para cachear configuraciones de timeout
+let cachedTimeoutConfig = {
+  warningTime: null,
+  cancelTime: null,
+  lastUpdate: null
+};
+
+const CACHE_TTL = 60000; // 1 minuto de caché
+
+/**
+ * Obtiene las configuraciones de timeout desde la BD
+ * Usa caché para evitar consultas excesivas
+ */
+async function getTimeoutConfig() {
+  const now = Date.now();
+  
+  // Si el caché es válido, usarlo
+  if (cachedTimeoutConfig.lastUpdate && (now - cachedTimeoutConfig.lastUpdate) < CACHE_TTL) {
+    return cachedTimeoutConfig;
+  }
+  
+  try {
+    // Cargar configuraciones desde BD
+    const conversationTimeout = await configService.getConfig('CONVERSATION_TIMEOUT');
+    
+    // CONVERSATION_TIMEOUT es el tiempo de cancelación en minutos
+    const cancelMinutes = parseInt(conversationTimeout?.Valor || process.env.CONVERSATION_TIMEOUT || '5', 10);
+    const warningMinutes = Math.max(1, cancelMinutes - 1); // 1 minuto antes de cancelar
+    
+    // Actualizar caché
+    cachedTimeoutConfig = {
+      warningTime: warningMinutes * 60 * 1000,
+      cancelTime: cancelMinutes * 60 * 1000,
+      lastUpdate: now
+    };
+    
+    logger.debug('⏱️  Configuración de timeout cargada: Warning=%dmin, Cancel=%dmin', warningMinutes, cancelMinutes);
+    
+    return cachedTimeoutConfig;
+  } catch (error) {
+    logger.error('❌ Error cargando configuraciones de timeout desde BD:', error.message);
+    logger.warn('⚠️  Usando configuraciones por defecto');
+    
+    // Fallback a valores por defecto
+    return {
+      warningTime: 4 * 60 * 1000, // 4 minutos
+      cancelTime: 5 * 60 * 1000,  // 5 minutos
+      lastUpdate: now
+    };
+  }
+}
 
 // Intervalo para limpieza de sesiones abandonadas (cada hora)
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hora
@@ -21,8 +70,9 @@ const CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hora
  */
 async function saveTimeoutExpiration(from) {
   try {
+    const config = await getTimeoutConfig();
     const pool = await getPool();
-    const expiraEn = new Date(Date.now() + CANCEL_TIME);
+    const expiraEn = new Date(Date.now() + config.cancelTime);
     
     await pool.request()
       .input('NumeroTelefono', sql.NVarChar, from)
@@ -88,7 +138,7 @@ const CANCEL_MESSAGES = {
  * @param {string} from - Número de teléfono del usuario
  * @param {string} state - Estado actual de la sesión
  */
-export function startSessionTimeout(from, state) {
+export async function startSessionTimeout(from, state) {
   // Limpiar timeouts anteriores si existen
   clearSessionTimeout(from);
   
@@ -99,12 +149,15 @@ export function startSessionTimeout(from, state) {
   
   const numeroCorregido = from.slice(0, 2) + from.slice(3);
   
+  // Obtener configuración de timeouts
+  const config = await getTimeoutConfig();
+  
   // Guardar timeout en BD
   saveTimeoutExpiration(from).catch(err => 
     logger.error('Error guardando timeout:', err)
   );
   
-  // Programar advertencia después de 4 minutos
+  // Programar advertencia
   const warningTimer = setTimeout(async () => {
     try {
       const session = await SessionService.getOrCreateSession(from);
@@ -118,9 +171,9 @@ export function startSessionTimeout(from, state) {
     } catch (err) {
       logger.error('❌ Error enviando advertencia de timeout:', err.message);
     }
-  }, WARNING_TIME);
+  }, config.warningTime);
   
-  // Programar cancelación después de 5 minutos
+  // Programar cancelación
   const cancelTimer = setTimeout(async () => {
     try {
       const session = await SessionService.getOrCreateSession(from);

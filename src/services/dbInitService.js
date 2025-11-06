@@ -376,10 +376,10 @@ async function checkTablesExist(dbName) {
     const result = await pool.request().query(`
       SELECT COUNT(*) as TableCount 
       FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos')
+      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones')
     `);
     
-    const expectedTables = 6; // Ahora esperamos 6 tablas
+    const expectedTables = 7; // Ahora esperamos 7 tablas (incluyendo Configuraciones)
     const foundTables = result.recordset[0].TableCount;
     
     if (foundTables < expectedTables) {
@@ -389,11 +389,11 @@ async function checkTablesExist(dbName) {
       const tablesCheck = await pool.request().query(`
         SELECT TABLE_NAME 
         FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos')
+        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones')
       `);
       
       const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
-      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos'];
+      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones'];
       const missingTables = allTables.filter(t => !existingTables.includes(t));
       
       if (missingTables.length > 0) {

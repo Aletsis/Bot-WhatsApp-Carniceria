@@ -2,19 +2,74 @@ import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import dotenv from 'dotenv';
 import dbService from '../services/dbService.js';
+import * as configService from '../services/configService.js';
 import logger from '../logger.js';
 
 dotenv.config();
 
-const API_BASE = (id) => `https://graph.facebook.com/v21.0/${id}/messages`;
-const PHONE_ID = process.env.PHONE_NUMBER_ID;
-const TOKEN = process.env.WHATSAPP_TOKEN;
+// Variables para cachear configuraciones
+let cachedConfig = {
+  PHONE_ID: null,
+  TOKEN: null,
+  NOTIFICATIONS_ENABLED: null,
+  lastUpdate: null
+};
 
-function assertEnv() {
-  if (!TOKEN) throw new Error('WHATSAPP_TOKEN no está definido en .env');
-  if (!PHONE_ID) throw new Error('PHONE_ID no está definido en .env');
+const CACHE_TTL = 60000; // 1 minuto de caché
+
+/**
+ * Obtiene las configuraciones de WhatsApp desde la BD
+ * Usa caché para evitar consultas excesivas
+ */
+async function getWhatsAppConfig() {
+  const now = Date.now();
+  
+  // Si el caché es válido, usarlo
+  if (cachedConfig.lastUpdate && (now - cachedConfig.lastUpdate) < CACHE_TTL) {
+    return cachedConfig;
+  }
+  
+  try {
+    // Cargar configuraciones desde BD
+    const token = await configService.getConfig('WHATSAPP_TOKEN');
+    const phoneId = await configService.getConfig('WHATSAPP_PHONE_NUMBER_ID');
+    const notificationsEnabled = await configService.getConfig('NOTIFICATIONS_ENABLED');
+    
+    // Actualizar caché
+    cachedConfig = {
+      PHONE_ID: phoneId?.Valor || process.env.PHONE_NUMBER_ID,
+      TOKEN: token?.Valor || process.env.WHATSAPP_TOKEN,
+      NOTIFICATIONS_ENABLED: notificationsEnabled?.Valor === 'true',
+      lastUpdate: now
+    };
+    
+    return cachedConfig;
+  } catch (error) {
+    logger.error('❌ Error cargando configuraciones de WhatsApp desde BD:', error.message);
+    logger.warn('⚠️  Usando configuraciones de .env como fallback');
+    
+    // Fallback a .env si hay error
+    return {
+      PHONE_ID: process.env.PHONE_NUMBER_ID,
+      TOKEN: process.env.WHATSAPP_TOKEN,
+      NOTIFICATIONS_ENABLED: true,
+      lastUpdate: now
+    };
+  }
 }
-assertEnv();
+
+const API_BASE = (id) => `https://graph.facebook.com/v21.0/${id}/messages`;
+
+async function assertEnv() {
+  const config = await getWhatsAppConfig();
+  if (!config.TOKEN) throw new Error('WHATSAPP_TOKEN no está definido en BD ni en .env');
+  if (!config.PHONE_ID) throw new Error('PHONE_NUMBER_ID no está definido en BD ni en .env');
+}
+
+// Verificar configuración al iniciar
+assertEnv().catch(err => {
+  logger.error('❌ Error verificando configuración de WhatsApp:', err.message);
+});
 
 // Configurar reintentos automáticos para axios
 axiosRetry(axios, {
@@ -58,8 +113,11 @@ async function apiSend(payload) {
     if (!to) throw new Error('apiSend: parámetro "to" es requerido');
     
     try {
-        const res = await axios.post(API_BASE(PHONE_ID), payload, {
-          headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }
+        // Obtener configuración actualizada
+        const config = await getWhatsAppConfig();
+        
+        const res = await axios.post(API_BASE(config.PHONE_ID), payload, {
+          headers: { Authorization: `Bearer ${config.TOKEN}`, 'Content-Type': 'application/json' }
         });
         
         // Validar respuesta de WhatsApp
@@ -273,15 +331,14 @@ export default {
      * @returns {Promise<boolean>} true si se envió correctamente, false si falló
      */
     notifyCustomerOrderStatus: async (telefono, pedidoID, nuevoEstado, nombreCliente = null) => {
-        // Verificar si las notificaciones están habilitadas
-        const notificationsEnabled = process.env.NOTIFICATIONS_ENABLED !== 'false';
-        
-        if (!notificationsEnabled) {
-            logger.debug('📵 Notificaciones deshabilitadas - No se envió notificación para pedido %d', pedidoID);
-            return false;
-        }
-
         try {
+            // Verificar si las notificaciones están habilitadas desde BD
+            const config = await getWhatsAppConfig();
+            
+            if (!config.NOTIFICATIONS_ENABLED) {
+                logger.debug('📵 Notificaciones deshabilitadas - No se envió notificación para pedido %d', pedidoID);
+                return false;
+            }
             // Templates de mensajes por estado
             const templates = {
                 'En espera de surtir': {

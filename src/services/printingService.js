@@ -3,6 +3,7 @@ const Network = escpos.Network;
 import logger from '../logger.js';
 import sql from 'mssql';
 import { getPool } from './dbService.js';
+import * as configService from './configService.js';
 
 /**
  * Servicio de Impresión ESC/POS
@@ -10,13 +11,64 @@ import { getPool } from './dbService.js';
  * Imprime tickets de pedidos en impresoras térmicas compatibles con ESC/POS.
  * Soporta impresoras conectadas por red (Network).
  * 
- * Configuración requerida en .env:
+ * Configuración desde BD (tabla Configuraciones):
  * - PRINTER_ENABLED: true/false (habilita o deshabilita impresión)
- * - PRINTER_HOST: IP de la impresora (ej: 192.168.0.100)
+ * - PRINTER_HOST: IP de la impresora (ej: 192.168.1.100)
  * - PRINTER_PORT: Puerto de la impresora (ej: 9100)
  * 
  * @module printingService
  */
+
+// Variables para cachear configuraciones de impresora
+let cachedPrinterConfig = {
+  enabled: null,
+  host: null,
+  port: null,
+  lastUpdate: null
+};
+
+const CACHE_TTL = 60000; // 1 minuto de caché
+
+/**
+ * Obtiene las configuraciones de impresora desde la BD
+ * Usa caché para evitar consultas excesivas
+ */
+async function getPrinterConfig() {
+  const now = Date.now();
+  
+  // Si el caché es válido, usarlo
+  if (cachedPrinterConfig.lastUpdate && (now - cachedPrinterConfig.lastUpdate) < CACHE_TTL) {
+    return cachedPrinterConfig;
+  }
+  
+  try {
+    // Cargar configuraciones desde BD
+    const enabled = await configService.getConfig('PRINTER_ENABLED');
+    const host = await configService.getConfig('PRINTER_HOST');
+    const port = await configService.getConfig('PRINTER_PORT');
+    
+    // Actualizar caché
+    cachedPrinterConfig = {
+      enabled: enabled?.Valor === 'true',
+      host: host?.Valor || process.env.PRINTER_HOST || '192.168.1.100',
+      port: parseInt(port?.Valor || process.env.PRINTER_PORT || '9100', 10),
+      lastUpdate: now
+    };
+    
+    return cachedPrinterConfig;
+  } catch (error) {
+    logger.error('❌ Error cargando configuraciones de impresora desde BD:', error.message);
+    logger.warn('⚠️  Usando configuraciones de .env como fallback');
+    
+    // Fallback a .env si hay error
+    return {
+      enabled: process.env.PRINTER_ENABLED !== 'false',
+      host: process.env.PRINTER_HOST || '192.168.1.100',
+      port: parseInt(process.env.PRINTER_PORT || '9100', 10),
+      lastUpdate: now
+    };
+  }
+}
 
 /**
  * Actualiza el estado de impresión de un pedido en la BD
@@ -79,11 +131,11 @@ function openDevice(device) {
  * @throws {Error} Si hay error de conexión o impresión
  */
 export async function printTicket(data) {
-  // Verificar si la impresión está habilitada
-  const printerEnabled = process.env.PRINTER_ENABLED === 'true';
+  // Obtener configuración de impresora desde BD
+  const config = await getPrinterConfig();
   
-  if (!printerEnabled) {
-    logger.info('🖨️  Impresión deshabilitada (PRINTER_ENABLED=false). Ticket no impreso.');
+  if (!config.enabled) {
+    logger.info('🖨️  Impresión deshabilitada. Ticket no impreso.');
     
     // Marcar como NoRequerida si hay pedidoID
     if (data.pedidoID) {
@@ -93,14 +145,11 @@ export async function printTicket(data) {
     return;
   }
 
-  const host = process.env.PRINTER_HOST || '192.168.0.100';
-  const port = parseInt(process.env.PRINTER_PORT || '9100', 10);
-
-  const device = new Network(host, port);
+  const device = new Network(config.host, config.port);
   const printer = new escpos.Printer(device);
 
   try {
-    logger.info('🖨️  Conectando a impresora %s:%d...', host, port);
+    logger.info('🖨️  Conectando a impresora %s:%d...', config.host, config.port);
     await openDevice(device);
 
     const fecha = data.fecha || new Date().toLocaleString('es-MX', {
