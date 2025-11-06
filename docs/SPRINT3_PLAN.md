@@ -60,24 +60,29 @@ Mejorar la seguridad del sistema, agregar funcionalidades críticas de gestión,
 
 ---
 
-### � Tarea 3: Notificaciones Automáticas a Clientes (Alta Prioridad)
+### 🔥 Tarea 3: Notificaciones Automáticas a Clientes (Alta Prioridad) ✅ COMPLETADA
 **Objetivo:** Enviar actualizaciones de estado de pedido automáticamente al cliente
 
 **Subtareas:**
-- [ ] Función `notifyCustomerOrderStatus()` en whatsappService
-- [ ] Templates de mensajes por estado:
+- [x] Función `notifyCustomerOrderStatus()` en whatsappService
+- [x] Templates de mensajes por estado:
   - "En ruta" → "🚚 Tu pedido está en camino"
   - "Entregado" → "✅ Pedido entregado. ¡Gracias por tu compra!"
   - "Cancelado" → "❌ Tu pedido ha sido cancelado"
-- [ ] Trigger automático al cambiar estado desde dashboard
-- [ ] Toggle en dashboard para habilitar/deshabilitar notificaciones
-- [ ] Log de notificaciones enviadas
+  - "En espera de surtir" → "⏳ Pedido recibido"
+- [x] Trigger automático al cambiar estado desde dashboard
+- [x] Configuración NOTIFICATIONS_ENABLED para habilitar/deshabilitar
+- [x] Log de notificaciones enviadas y errores
 
 **Archivos Afectados:**
-- `src/services/whatsappService.js`
-- `src/controllers/dashboardController.js`
+- ✅ `src/services/whatsappService.js` - notifyCustomerOrderStatus() con 4 templates
+- ✅ `src/controllers/dashboardController.js` - Integración en updateEstadoPedido/Nuevo
+- ✅ `.env` y `.env.example` - NOTIFICATIONS_ENABLED configurado
+- ✅ `docs/CUSTOMER_NOTIFICATIONS.md` - Documentación completa
 
-**Estimación:** 1.5-2 horas
+**Resultado:** 📱 Clientes reciben notificaciones automáticas sobre estado de pedido
+
+**Estimación:** ~~1.5-2 horas~~ → **Tiempo real: 1.5 horas**
 
 ---
 

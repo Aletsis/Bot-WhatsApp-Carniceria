@@ -261,5 +261,86 @@ export default {
                 body: 'Nuestros horarios de servicio son de Lunes a Domingo de 8:00a.m. a 5:00p.m.'
             }
         });
+    },
+
+    /**
+     * Notifica automáticamente al cliente sobre cambios en el estado de su pedido
+     * 
+     * @param {string} telefono - Número de teléfono del cliente (formato: +52...)
+     * @param {number} pedidoID - ID del pedido
+     * @param {string} nuevoEstado - Nuevo estado del pedido
+     * @param {string} nombreCliente - Nombre del cliente (opcional, para personalizar)
+     * @returns {Promise<boolean>} true si se envió correctamente, false si falló
+     */
+    notifyCustomerOrderStatus: async (telefono, pedidoID, nuevoEstado, nombreCliente = null) => {
+        // Verificar si las notificaciones están habilitadas
+        const notificationsEnabled = process.env.NOTIFICATIONS_ENABLED !== 'false';
+        
+        if (!notificationsEnabled) {
+            logger.debug('📵 Notificaciones deshabilitadas - No se envió notificación para pedido %d', pedidoID);
+            return false;
+        }
+
+        try {
+            // Templates de mensajes por estado
+            const templates = {
+                'En espera de surtir': {
+                    emoji: '⏳',
+                    title: 'Pedido Recibido',
+                    message: 'Tu pedido ha sido recibido y está en espera de ser surtido.'
+                },
+                'En ruta': {
+                    emoji: '🚚',
+                    title: 'Pedido en Camino',
+                    message: '¡Tu pedido está en camino! Pronto llegará a tu dirección.'
+                },
+                'Entregado': {
+                    emoji: '✅',
+                    title: 'Pedido Entregado',
+                    message: '¡Tu pedido ha sido entregado exitosamente!\n\n¡Gracias por tu compra! Esperamos verte pronto.'
+                },
+                'Cancelado': {
+                    emoji: '❌',
+                    title: 'Pedido Cancelado',
+                    message: 'Tu pedido ha sido cancelado.\n\nSi tienes dudas, contáctanos al 4448310535.'
+                }
+            };
+
+            const template = templates[nuevoEstado];
+
+            // Si no hay template para este estado, no enviar notificación
+            if (!template) {
+                logger.debug('📵 Sin template de notificación para estado: %s (pedido %d)', nuevoEstado, pedidoID);
+                return false;
+            }
+
+            // Construir mensaje personalizado
+            const saludo = nombreCliente ? `Hola ${nombreCliente},\n\n` : '';
+            const mensaje = `${template.emoji} *${template.title}*\n\n${saludo}${template.message}\n\n📦 Folio: ${pedidoID}`;
+
+            // Enviar notificación
+            await apiSend({
+                messaging_product: 'whatsapp',
+                to: telefono,
+                type: 'text',
+                text: { body: mensaje }
+            });
+
+            logger.info('✅ Notificación enviada: Pedido %d → %s (Tel: %s)', pedidoID, nuevoEstado, telefono);
+            return true;
+
+        } catch (error) {
+            // NO lanzar error - las notificaciones no deben bloquear la actualización del pedido
+            logger.error('❌ Error enviando notificación de pedido %d a %s:', pedidoID, telefono, error.message);
+            logger.error('   Estado: %s', nuevoEstado);
+            
+            // Logging adicional para debugging
+            if (error.response) {
+                logger.error('   Response status: %d', error.response.status);
+                logger.error('   Response data: %o', error.response.data);
+            }
+            
+            return false;
+        }
     }
 };

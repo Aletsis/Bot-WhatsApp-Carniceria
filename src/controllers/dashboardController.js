@@ -5,6 +5,7 @@ import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 import { printTicket, isPrintingEnabled } from '../services/printingService.js';
 import { updatePedidoEstadoWithVersion } from '../services/transactionService.js';
+import whatsappService from '../services/whatsappService.js';
 
 /**
  * Verifica si el usuario está autenticado
@@ -169,11 +170,17 @@ export async function updateEstadoPedido(req, res) {
     while (attempt < MAX_RETRIES) {
       attempt++;
       
-      // Obtener pedido actual CON VERSION
+      // Obtener pedido actual CON VERSION y datos del cliente
       const pool = await getPool();
       const pedidoResult = await pool.request()
         .input('pedidoId', sql.Int, parseInt(pedidoId))
-        .query('SELECT PedidoID, Estado, Version FROM Pedidos WHERE PedidoID = @pedidoId');
+        .query(`
+          SELECT p.PedidoID, p.Estado, p.Version, p.ClienteID,
+                 c.NumeroTelefono, c.Nombre
+          FROM Pedidos p
+          INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
+          WHERE p.PedidoID = @pedidoId
+        `);
       
       if (pedidoResult.recordset.length === 0) {
         return res.status(404).json({ 
@@ -182,7 +189,8 @@ export async function updateEstadoPedido(req, res) {
         });
       }
       
-      const currentVersion = pedidoResult.recordset[0].Version || 0;
+      const pedido = pedidoResult.recordset[0];
+      const currentVersion = pedido.Version || 0;
       
       // 🔐 ACTUALIZACIÓN CON OPTIMISTIC LOCKING
       const success = await updatePedidoEstadoWithVersion(
@@ -194,6 +202,19 @@ export async function updateEstadoPedido(req, res) {
       
       if (success) {
         logger.info('✅ Estado actualizado (intento %d/%d): Pedido %s → %s', attempt, MAX_RETRIES, pedidoId, estadoFinal);
+        
+        // 📱 NOTIFICACIÓN AUTOMÁTICA AL CLIENTE
+        // Ejecutar en background para no bloquear la respuesta
+        whatsappService.notifyCustomerOrderStatus(
+          pedido.NumeroTelefono,
+          parseInt(pedidoId),
+          estadoFinal,
+          pedido.Nombre
+        ).catch(err => {
+          // Error ya loggeado en whatsappService, solo registrar que falló
+          logger.warn('⚠️ Notificación no enviada para pedido %s (no crítico)', pedidoId);
+        });
+        
         return res.json({ success: true, message: 'Estado actualizado correctamente' });
       } else {
         // Conflicto de versión - otro proceso modificó el pedido
@@ -450,11 +471,17 @@ export async function updateEstadoPedidoNuevo(req, res) {
     while (attempt < MAX_RETRIES) {
       attempt++;
       
-      // Obtener pedido actual CON VERSION
+      // Obtener pedido actual CON VERSION y datos del cliente
       const pool = await getPool();
       const pedidoResult = await pool.request()
         .input('pedidoId', sql.Int, parseInt(pedidoId))
-        .query('SELECT PedidoID, Estado, Version FROM Pedidos WHERE PedidoID = @pedidoId');
+        .query(`
+          SELECT p.PedidoID, p.Estado, p.Version, p.ClienteID,
+                 c.NumeroTelefono, c.Nombre
+          FROM Pedidos p
+          INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
+          WHERE p.PedidoID = @pedidoId
+        `);
       
       if (pedidoResult.recordset.length === 0) {
         return res.status(404).json({ 
@@ -463,7 +490,8 @@ export async function updateEstadoPedidoNuevo(req, res) {
         });
       }
       
-      const currentVersion = pedidoResult.recordset[0].Version || 0;
+      const pedido = pedidoResult.recordset[0];
+      const currentVersion = pedido.Version || 0;
       
       // 🔐 ACTUALIZACIÓN CON OPTIMISTIC LOCKING (sin notas)
       const success = await updatePedidoEstadoWithVersion(
@@ -474,6 +502,19 @@ export async function updateEstadoPedidoNuevo(req, res) {
       
       if (success) {
         logger.info('✅ Estado actualizado (intento %d/%d): Pedido %s → %s', attempt, MAX_RETRIES, pedidoId, estadoRecibido);
+        
+        // 📱 NOTIFICACIÓN AUTOMÁTICA AL CLIENTE
+        // Ejecutar en background para no bloquear la respuesta
+        whatsappService.notifyCustomerOrderStatus(
+          pedido.NumeroTelefono,
+          parseInt(pedidoId),
+          estadoRecibido,
+          pedido.Nombre
+        ).catch(err => {
+          // Error ya loggeado en whatsappService, solo registrar que falló
+          logger.warn('⚠️ Notificación no enviada para pedido %s (no crítico)', pedidoId);
+        });
+        
         return res.json({ 
           success: true, 
           message: 'Estado actualizado correctamente'
