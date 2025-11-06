@@ -3,6 +3,8 @@ import bodyParser from 'body-parser';
 import session from 'express-session';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import webhookRouter from './src/routes/webhook.js';
 import dashboardRouter from './src/routes/dashboard.js';
 import authRouter from './src/routes/auth.js';
@@ -10,6 +12,9 @@ import { getPool, getPoolInstance } from './src/services/dbService.js';
 import { initializeDatabase, checkSqlServerConnection } from './src/services/dbInitService.js';
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
 import logger from './src/logger.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -74,17 +79,36 @@ app.use(globalLimiter);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true })); // Para procesar forms
 
-// Servir archivos estáticos
-app.use('/css', express.static('src/public/css'));
-app.use('/js', express.static('src/public/js'));
+// Servir archivos estáticos del dashboard React (producción)
+if (isProduction) {
+  const clientBuildPath = path.join(__dirname, 'client', 'dist');
+  app.use(express.static(clientBuildPath));
+  logger.info('📦 Sirviendo dashboard React desde:', clientBuildPath);
+} else {
+  // En desarrollo, el cliente React se sirve en puerto 5173 con Vite
+  logger.info('🔧 Modo desarrollo: Dashboard React en http://localhost:5173');
+}
 
-// Rutas públicas
-app.get('/', (req, res) => res.send('Carniceria WhatsApp Bot is RUNNING'));
-app.use('/', authRouter); // Login/Logout
+// Rutas públicas API
 app.use('/webhook', webhookLimiter, webhookRouter);
+app.use('/auth', authRouter); // Login/Logout
 
-// Rutas protegidas
+// Rutas protegidas API
 app.use('/dashboard', dashboardRouter);
+
+// En producción, cualquier ruta no encontrada sirve el index.html del React app
+if (isProduction) {
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'client', 'dist', 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.json({ 
+      message: 'Carniceria WhatsApp Bot API',
+      dashboard: 'http://localhost:5173'
+    });
+  });
+}
 
 const PORT = process.env.PORT || 3000;
 const server = app.listen(PORT, () => {

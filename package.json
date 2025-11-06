@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon --watch src --exec node app.js",
+    "dev:client": "cd client && npm run dev",
+    "dev:all": "concurrently \"npm run dev\" \"npm run dev:client\"",
+    "build:client": "cd client && npm run build",
     "init-db": "node scripts/init-db.js",
     "manage-users": "node scripts/manage-users.js",
     "prod": "set NODE_ENV=production && node app.js",
@@ -37,6 +40,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
+    "@tailwindcss/postcss": "^4.1.16",
     "eslint": "^9.36.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import": "^2.32.0",

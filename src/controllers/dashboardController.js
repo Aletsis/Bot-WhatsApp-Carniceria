@@ -3,6 +3,28 @@ import userService from '../services/userService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 
+/**
+ * Verifica si el usuario está autenticado
+ */
+export async function checkAuth(req, res) {
+  try {
+    if (req.session && req.session.user) {
+      return res.json({ 
+        success: true, 
+        user: {
+          username: req.session.user.username,
+          nombre: req.session.user.nombre,
+          rol: req.session.user.rol,
+        }
+      });
+    }
+    return res.status(401).json({ success: false, message: 'No autenticado' });
+  } catch (err) {
+    logger.error('Error verificando autenticación:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
 export async function getStats(req, res) {
   try {
     const pool = await getPool();
