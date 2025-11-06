@@ -35,11 +35,11 @@ async function getWhatsAppConfig() {
     const phoneId = await configService.getConfig('PHONE_NUMBER_ID');
     const notificationsEnabled = await configService.getConfig('NOTIFICATIONS_ENABLED');
     
-    // Actualizar caché
+    // Actualizar caché (usar valorOriginal si existe, sino valor enmascarado)
     cachedConfig = {
-      PHONE_ID: phoneId?.Valor || process.env.PHONE_NUMBER_ID,
-      TOKEN: token?.Valor || process.env.WHATSAPP_TOKEN,
-      NOTIFICATIONS_ENABLED: notificationsEnabled?.Valor === 'true',
+      PHONE_ID: phoneId?.valorOriginal || phoneId?.valor || process.env.PHONE_NUMBER_ID,
+      TOKEN: token?.valorOriginal || token?.valor || process.env.WHATSAPP_TOKEN,
+      NOTIFICATIONS_ENABLED: notificationsEnabled?.valor === 'true',
       lastUpdate: now
     };
     

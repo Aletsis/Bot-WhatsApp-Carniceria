@@ -17,9 +17,11 @@ export async function checkAuth(req, res) {
       return res.json({ 
         success: true, 
         user: {
-          username: req.session.user.username,
-          nombre: req.session.user.nombre,
-          rol: req.session.user.rol,
+          UsuarioID: req.session.user.UsuarioID,
+          Username: req.session.user.Username,
+          Nombre: req.session.user.Nombre,
+          Email: req.session.user.Email,
+          Rol: req.session.user.Rol,
         }
       });
     }
@@ -802,7 +804,7 @@ export async function reimprimirPedido(req, res) {
 export async function getConfiguraciones(req, res) {
   try {
     // Verificar que el usuario es admin
-    if (req.session.user.rol !== 'admin') {
+    if (req.session.user.Rol !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         error: 'Acceso denegado. Solo administradores pueden ver configuraciones.' 
@@ -811,7 +813,7 @@ export async function getConfiguraciones(req, res) {
 
     const configs = await configService.getAllConfigs();
     
-    logger.info('✅ Configuraciones obtenidas por admin: %s', req.session.user.username);
+    logger.info('✅ Configuraciones obtenidas por admin: %s', req.session.user.Username);
     res.json({ success: true, data: configs });
   } catch (err) {
     logger.error('❌ Error obteniendo configuraciones:', err.message);
@@ -825,7 +827,7 @@ export async function getConfiguraciones(req, res) {
 export async function updateConfiguraciones(req, res) {
   try {
     // Verificar que el usuario es admin
-    if (req.session.user.rol !== 'admin') {
+    if (req.session.user.Rol !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         error: 'Acceso denegado. Solo administradores pueden modificar configuraciones.' 
@@ -842,7 +844,7 @@ export async function updateConfiguraciones(req, res) {
     }
 
     logger.info('🔧 Actualizando %d configuraciones por: %s', 
-                configuraciones.length, req.session.user.username);
+                configuraciones.length, req.session.user.Username);
 
     const resultados = await configService.updateMultipleConfigs(configuraciones);
 
@@ -874,7 +876,7 @@ export async function updateConfiguraciones(req, res) {
 export async function getConfiguracionesPorCategoria(req, res) {
   try {
     // Verificar que el usuario es admin
-    if (req.session.user.rol !== 'admin') {
+    if (req.session.user.Rol !== 'admin') {
       return res.status(403).json({ 
         success: false, 
         error: 'Acceso denegado. Solo administradores pueden ver configuraciones.' 
@@ -893,7 +895,7 @@ export async function getConfiguracionesPorCategoria(req, res) {
 
     const configs = await configService.getConfigsByCategory(categoria);
     
-    logger.debug('✅ Configuraciones de %s obtenidas por: %s', categoria, req.session.user.username);
+    logger.debug('✅ Configuraciones de %s obtenidas por: %s', categoria, req.session.user.Username);
     res.json({ success: true, data: configs });
   } catch (err) {
     logger.error('❌ Error obteniendo configuraciones de %s:', req.params.categoria, err.message);

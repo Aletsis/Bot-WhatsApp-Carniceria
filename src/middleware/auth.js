@@ -51,6 +51,7 @@ export function requireRole(allowedRoles) {
     }
 
     const userRole = req.session.user.Rol || req.session.user.role;
+    
     if (!roles.includes(userRole)) {
       logger.warn('🚫 Usuario %s (rol: %s) intentó acceder a ruta que requiere: %s', 
         req.session.user.Username, userRole, roles.join(', '));

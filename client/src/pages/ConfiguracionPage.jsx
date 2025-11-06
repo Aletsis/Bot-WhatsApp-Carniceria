@@ -48,7 +48,17 @@ export default function ConfiguracionPage() {
       // Filtrar solo los configs modificados de esta categoría
       const configsCategoria = configs[categoria] || [];
       const cambios = configsCategoria
-        .filter(config => modifiedConfigs[config.Clave] !== undefined)
+        .filter(config => {
+          // Incluir solo si está modificado
+          if (modifiedConfigs[config.Clave] === undefined) return false;
+          
+          // Para secrets vacíos, no incluirlos (el usuario no quiere cambiarlos)
+          if (config.Tipo === 'secret' && modifiedConfigs[config.Clave].trim() === '') {
+            return false;
+          }
+          
+          return true;
+        })
         .map(config => ({
           clave: config.Clave,
           valor: modifiedConfigs[config.Clave]
@@ -133,15 +143,27 @@ export default function ConfiguracionPage() {
         );
 
       case 'secret':
+        // Para secrets: mostrar enmascarado si no se ha modificado, o el nuevo valor si se editó
+        const valorSecret = modifiedConfigs[config.Clave] !== undefined 
+          ? modifiedConfigs[config.Clave] 
+          : ''; // Mostrar vacío para que el usuario sepa que debe ingresar un valor nuevo
+        
         return (
-          <input
-            type="password"
-            value={valor}
-            onChange={(e) => handleInputChange(config.Clave, e.target.value)}
-            disabled={!config.Editable}
-            placeholder="Ingrese nuevo valor (dejar vacío para mantener actual)"
-            className={inputClasses}
-          />
+          <div className="space-y-2">
+            <input
+              type="password"
+              value={valorSecret}
+              onChange={(e) => handleInputChange(config.Clave, e.target.value)}
+              disabled={!config.Editable}
+              placeholder="Dejar vacío para mantener el valor actual"
+              className={inputClasses}
+            />
+            {config.Valor && config.Valor.startsWith('****') && (
+              <p className="text-xs text-gray-500">
+                Valor actual: {config.Valor} (enmascarado por seguridad)
+              </p>
+            )}
+          </div>
         );
 
       default: // string

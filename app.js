@@ -62,7 +62,7 @@ app.use(session({
     secure: isProduction, // Solo HTTPS en producción
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 horas
-    sameSite: 'strict' // Protección adicional contra CSRF
+    sameSite: isProduction ? 'strict' : 'lax' // 'lax' en desarrollo para que funcione con Vite proxy
   }
 }));
 
@@ -124,7 +124,7 @@ app.use('/webhook', webhookLimiter, webhookRouter);
 
 // Rutas de API para React (con prefijo /api)
 app.use('/api/auth', authRouter); // Login/Logout
-app.use('/api', dashboardRouter); // Dashboard endpoints
+app.use('/api/dashboard', dashboardRouter); // Dashboard endpoints
 
 // Rutas legacy (para retrocompatibilidad)
 app.use('/auth', authRouter);
@@ -180,8 +180,15 @@ async function initApp() {
 initApp();
 
 // Handlers globales
-process.on('unhandledRejection', (reason) => {
-  logger.error('[unhandledRejection] Razón:', reason);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[unhandledRejection] Promesa rechazada:', promise);
+  console.error('[unhandledRejection] Razón completa:', reason);
+  if (reason instanceof Error) {
+    logger.error('[unhandledRejection] Error: %s', reason.message);
+    logger.error('[unhandledRejection] Stack: %s', reason.stack);
+  } else {
+    logger.error('[unhandledRejection] Razón:', reason);
+  }
   gracefulShutdown({ server, pool: getPoolInstance() });
 });
 

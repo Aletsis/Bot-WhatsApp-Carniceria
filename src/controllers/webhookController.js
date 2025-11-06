@@ -53,8 +53,8 @@ export async function messageWebhookHandler(req, res) {
 
     const from = message.from;
     const text = message.text?.body || '';
-    const numeroCorregido = from.slice(0, 2) + from.slice(3);
     const buttonId = message.interactive?.button_reply?.id;
+    const numeroCorregido = from;
 
     logger.info('📱 Mensaje recibido de %s | texto="%s" | botón=%s', from, text.substring(0, 50), buttonId || 'ninguno');
 

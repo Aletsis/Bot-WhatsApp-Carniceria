@@ -35,17 +35,31 @@ async function getTimeoutConfig() {
     const conversationTimeout = await configService.getConfig('CONVERSATION_TIMEOUT');
     
     // CONVERSATION_TIMEOUT es el tiempo de cancelación en minutos
-    const cancelMinutes = parseInt(conversationTimeout?.Valor || process.env.CONVERSATION_TIMEOUT || '5', 10);
-    const warningMinutes = Math.max(1, cancelMinutes - 1); // 1 minuto antes de cancelar
+    const cancelMinutes = parseInt(conversationTimeout?.valorOriginal || conversationTimeout?.valor || process.env.CONVERSATION_TIMEOUT || '30', 10);
+    
+    // Si el valor es muy grande (> 1000), asumimos que está en milisegundos y lo convertimos
+    let cancelTime = cancelMinutes > 1000 
+      ? cancelMinutes // Ya está en milisegundos (desde .env antiguo)
+      : cancelMinutes * 60 * 1000; // Convertir minutos a milisegundos
+    
+    // Límite máximo de setTimeout en JavaScript (2^31-1 ms ≈ 24.8 días)
+    const MAX_TIMEOUT = 2147483647;
+    if (cancelTime > MAX_TIMEOUT) {
+      logger.warn('⚠️  Timeout de %dms excede el máximo permitido, ajustando a %dms (24.8 días)', cancelTime, MAX_TIMEOUT);
+      cancelTime = MAX_TIMEOUT;
+    }
+    
+    const warningTime = Math.max(60000, cancelTime - 60000); // 1 minuto antes de cancelar
     
     // Actualizar caché
     cachedTimeoutConfig = {
-      warningTime: warningMinutes * 60 * 1000,
-      cancelTime: cancelMinutes * 60 * 1000,
+      warningTime: warningTime,
+      cancelTime: cancelTime,
       lastUpdate: now
     };
     
-    logger.debug('⏱️  Configuración de timeout cargada: Warning=%dmin, Cancel=%dmin', warningMinutes, cancelMinutes);
+    logger.debug('⏱️  Configuración de timeout cargada: Warning=%dms (%dmin), Cancel=%dms (%dmin)', 
+                 warningTime, Math.round(warningTime / 60000), cancelTime, Math.round(cancelTime / 60000));
     
     return cachedTimeoutConfig;
   } catch (error) {
@@ -203,7 +217,7 @@ export async function startSessionTimeout(from, state) {
     } catch (err) {
       logger.error('❌ Error cancelando sesión por timeout:', err.message);
     }
-  }, CANCEL_TIME);
+  }, config.cancelTime);
   
   // Guardar referencias de los timers
   warningTimeouts.set(from, warningTimer);

@@ -114,14 +114,15 @@ export async function getConfig(clave) {
     logger.debug('✅ Configuración obtenida: %s = %s', clave, config.Tipo === 'secret' ? '****' : config.Valor);
     
     return {
-      ConfigID: config.ConfigID,
-      Clave: config.Clave,
-      Valor: valorMostrar,
-      Descripcion: config.Descripcion,
-      Tipo: config.Tipo,
-      Categoria: config.Categoria,
-      Editable: config.Editable,
-      FechaActualizacion: config.FechaActualizacion
+      configID: config.ConfigID,
+      clave: config.Clave,
+      valor: valorMostrar,
+      valorOriginal: config.Valor, // Guardar el valor original sin enmascarar
+      descripcion: config.Descripcion,
+      tipo: config.Tipo,
+      categoria: config.Categoria,
+      editable: config.Editable,
+      fechaActualizacion: config.FechaActualizacion
     };
   } catch (error) {
     logger.error('❌ Error obteniendo configuración %s:', clave, error.message);
@@ -149,6 +150,19 @@ export async function updateConfig(clave, nuevoValor) {
     
     if (!configActual.editable) {
       throw new Error(`Configuración no editable: ${clave}`);
+    }
+    
+    // Si el valor está enmascarado (empieza con ****), ignorar actualización
+    // Esto ocurre cuando el usuario no modifica un campo secret
+    if (nuevoValor && nuevoValor.startsWith('****')) {
+      logger.debug('⏭️ Omitiendo actualización de %s (valor enmascarado sin cambios)', clave);
+      return true; // Retornar éxito sin actualizar
+    }
+    
+    // Si el valor está vacío y es un secret, mantener el valor actual
+    if (configActual.tipo === 'secret' && (!nuevoValor || nuevoValor.trim() === '')) {
+      logger.debug('⏭️ Omitiendo actualización de %s (secret vacío, manteniendo valor actual)', clave);
+      return true;
     }
     
     // Validar el valor según el tipo
