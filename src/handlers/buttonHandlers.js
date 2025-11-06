@@ -2,7 +2,8 @@ import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import DBService from '../services/dbService.js';
 import { startSessionTimeout, clearSessionTimeout } from '../services/sessionTimeoutService.js';
-import { printTicket, isPrintingEnabled } from '../services/printingService.js';
+import { printTicket } from '../services/printingService.js';
+import * as configService from '../services/configService.js';
 import logger from '../logger.js';
 
 /**
@@ -139,8 +140,12 @@ async function handleConfirmarDireccionButton(from, session, numeroCorregido, cl
   const folio = DBService.generateFolio();
   const pedidoID = await DBService.createPedido(cliente.ClienteID, folio, 'En espera de surtir', buf.pedido);
   
+  // Verificar si la impresión está habilitada desde configuración
+  const printerEnabledConfig = await configService.getConfig('PRINTER_ENABLED');
+  const isPrintingEnabled = printerEnabledConfig?.Valor === 'true';
+  
   // Intentar imprimir ticket (no bloquea si falla)
-  if (isPrintingEnabled()) {
+  if (isPrintingEnabled) {
     try {
       await printTicket({
         pedidoID: pedidoID,  // ⚡ Pasar ID del pedido para rastreo de impresión

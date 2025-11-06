@@ -3,7 +3,7 @@ import { getPool } from '../services/dbService.js';
 import * as userService from '../services/userService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
-import { printTicket, isPrintingEnabled } from '../services/printingService.js';
+import { printTicket } from '../services/printingService.js';
 import { updatePedidoEstadoWithVersion } from '../services/transactionService.js';
 import whatsappService from '../services/whatsappService.js';
 import * as configService from '../services/configService.js';
@@ -703,8 +703,11 @@ export async function reimprimirPedido(req, res) {
   try {
     const { pedidoId } = req.params;
     
-    // Verificar si la impresión está habilitada
-    if (!isPrintingEnabled()) {
+    // Verificar si la impresión está habilitada desde configuración
+    const printerEnabledConfig = await configService.getConfig('PRINTER_ENABLED');
+    const isPrintingEnabled = printerEnabledConfig?.Valor === 'true';
+    
+    if (!isPrintingEnabled) {
       return res.status(400).json({ 
         success: false, 
         error: 'Servicio de impresión deshabilitado' 

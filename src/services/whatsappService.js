@@ -32,7 +32,7 @@ async function getWhatsAppConfig() {
   try {
     // Cargar configuraciones desde BD
     const token = await configService.getConfig('WHATSAPP_TOKEN');
-    const phoneId = await configService.getConfig('WHATSAPP_PHONE_NUMBER_ID');
+    const phoneId = await configService.getConfig('PHONE_NUMBER_ID');
     const notificationsEnabled = await configService.getConfig('NOTIFICATIONS_ENABLED');
     
     // Actualizar caché

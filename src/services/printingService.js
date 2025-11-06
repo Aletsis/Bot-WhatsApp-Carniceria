@@ -214,22 +214,3 @@ export async function printTicket(data) {
   }
 }
 
-/**
- * Verifica si el servicio de impresión está habilitado
- * @returns {boolean}
- */
-export function isPrintingEnabled() {
-  return process.env.PRINTER_ENABLED === 'true';
-}
-
-/**
- * Obtiene la configuración actual de la impresora
- * @returns {Object} Configuración de la impresora
- */
-export function getPrinterConfig() {
-  return {
-    enabled: process.env.PRINTER_ENABLED === 'true',
-    host: process.env.PRINTER_HOST || '192.168.0.100',
-    port: parseInt(process.env.PRINTER_PORT || '9100', 10)
-  };
-}
