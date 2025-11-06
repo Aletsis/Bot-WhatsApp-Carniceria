@@ -122,9 +122,9 @@ export default function PedidosPage() {
                         <strong>Contenido:</strong>
                       </p>
                       <p className="text-gray-700 bg-gray-50 p-2 rounded">
-                        {pedido.Contenido.length > 150
+                        {pedido.Contenido && pedido.Contenido.length > 150
                           ? pedido.Contenido.substring(0, 150) + '...'
-                          : pedido.Contenido}
+                          : pedido.Contenido || 'Sin contenido'}
                       </p>
                     </div>
                   </div>

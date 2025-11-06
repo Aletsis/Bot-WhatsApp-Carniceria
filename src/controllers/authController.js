@@ -175,3 +175,89 @@ export function logout(req, res) {
     res.redirect('/login');
   });
 }
+
+/**
+ * API: Procesa el login (JSON)
+ */
+export async function loginAPI(req, res) {
+  try {
+    const { username, password } = req.body;
+    
+    // Validar campos
+    if (!username || !password) {
+      logger.warn('⚠️ Intento de login API sin credenciales completas');
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Usuario y contraseña requeridos' 
+      });
+    }
+    
+    // Obtener IP del cliente
+    const ip = req.ip || req.connection.remoteAddress;
+    
+    // Autenticar usuario usando base de datos
+    const user = await authenticateUser(username, password, ip);
+    
+    if (!user) {
+      logger.warn('🚫 Login API fallido para usuario: %s desde IP: %s', username, ip);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Credenciales inválidas' 
+      });
+    }
+    
+    // Crear sesión con información completa del usuario
+    req.session.user = {
+      UsuarioID: user.UsuarioID,
+      Username: user.Username,
+      Rol: user.Rol,
+      Nombre: user.Nombre,
+      Email: user.Email
+    };
+    req.session.loginTime = new Date();
+    
+    logger.info('✅ Login API exitoso: %s (Rol: %s) desde IP: %s', username, user.Rol, ip);
+    
+    res.json({ 
+      success: true, 
+      message: 'Login exitoso',
+      user: {
+        UsuarioID: user.UsuarioID,
+        Username: user.Username,
+        Rol: user.Rol,
+        Nombre: user.Nombre,
+        Email: user.Email
+      }
+    });
+    
+  } catch (err) {
+    logger.error('❌ Error en login API:', err);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error del servidor' 
+    });
+  }
+}
+
+/**
+ * API: Cierra la sesión (JSON)
+ */
+export function logoutAPI(req, res) {
+  const username = req.session?.user?.Username || req.session?.user?.username;
+  
+  req.session.destroy(err => {
+    if (err) {
+      logger.error('❌ Error al cerrar sesión API:', err);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error al cerrar sesión' 
+      });
+    }
+    
+    logger.info('👋 Logout API: %s', username);
+    res.json({ 
+      success: true, 
+      message: 'Sesión cerrada' 
+    });
+  });
+}

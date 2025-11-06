@@ -26,7 +26,8 @@ export const pedidosService = {
     const response = await axios.get('/dashboard/pedidos', {
       params: { estado },
     });
-    return response.data;
+    // El backend devuelve { success: true, data: [...] }
+    return response.data.data || response.data;
   },
 
   updateEstado: async (id, nuevoEstado) => {
@@ -40,7 +41,8 @@ export const pedidosService = {
 export const clientesService = {
   getAll: async () => {
     const response = await axios.get('/dashboard/clientes');
-    return response.data;
+    // El backend puede devolver { success: true, data: [...] } o directamente el array
+    return response.data.data || response.data;
   },
 
   create: async (clienteData) => {
@@ -62,14 +64,14 @@ export const clientesService = {
 export const conversacionesService = {
   getAll: async () => {
     const response = await axios.get('/dashboard/conversaciones');
-    return response.data;
+    return response.data.data || response.data;
   },
 };
 
 export const usuariosService = {
   getAll: async () => {
     const response = await axios.get('/dashboard/usuarios');
-    return response.data;
+    return response.data.data || response.data;
   },
 
   create: async (usuarioData) => {
@@ -77,17 +79,15 @@ export const usuariosService = {
     return response.data;
   },
 
-  updatePassword: async (id, nuevaPassword) => {
-    const response = await axios.put(`/dashboard/usuarios/${id}/password`, {
-      nuevaPassword,
+  cambiarPassword: async (id, password) => {
+    const response = await axios.post(`/dashboard/usuarios/${id}/cambiar-password`, {
+      password,
     });
     return response.data;
   },
 
-  updateEstado: async (id, activo) => {
-    const response = await axios.put(`/dashboard/usuarios/${id}/estado`, {
-      activo,
-    });
+  toggle: async (id) => {
+    const response = await axios.put(`/dashboard/usuarios/${id}/toggle`);
     return response.data;
   },
 };

@@ -1,4 +1,4 @@
-import userService from '../services/userService.js';
+import * as userService from '../services/userService.js';
 import logger from '../logger.js';
 
 /**

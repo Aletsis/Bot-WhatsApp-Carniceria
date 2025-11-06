@@ -14,7 +14,8 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Solo redirigir si es un 401 y NO es el endpoint check-auth
+    if (error.response?.status === 401 && !error.config.url.includes('/check-auth')) {
       // Redirigir a login si no está autenticado
       window.location.href = '/';
     }

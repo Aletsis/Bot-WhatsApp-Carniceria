@@ -1,5 +1,5 @@
 import { getPool } from '../services/dbService.js';
-import userService from '../services/userService.js';
+import * as userService from '../services/userService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 
@@ -72,14 +72,14 @@ export async function getPedidosRecientes(req, res) {
       .query(`
         SELECT TOP (${limit})
           p.PedidoID,
-          p.Folio as FolioPedido,
-          p.Estado as EstadoPedido,
-          p.Fecha as FechaCreacion,
-          p.Contenido as DetallesPedido,
+          p.Folio,
+          p.Estado,
+          p.Fecha,
+          p.Contenido,
           p.Notas,
           c.Nombre as NombreCliente,
-          c.NumeroTelefono as TelefonoCliente,
-          c.Direccion as DireccionEntrega
+          c.NumeroTelefono,
+          c.Direccion as DireccionCliente
         FROM Pedidos p
         INNER JOIN Clientes c ON p.ClienteID = c.ClienteID
         ORDER BY p.Fecha DESC

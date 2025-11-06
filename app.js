@@ -46,14 +46,21 @@ app.use(session({
   }
 }));
 
-// Rate limiting global
+// Rate limiting global (más permisivo en desarrollo)
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: isProduction ? 100 : 1000, // 1000 en desarrollo, 100 en producción
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
   validate: { xForwardedForHeader: false },
+  skip: (req) => {
+    // En desarrollo, no aplicar rate limit a localhost
+    if (!isProduction && (req.ip === '::1' || req.ip === '127.0.0.1' || req.ip === '::ffff:127.0.0.1')) {
+      return true;
+    }
+    return false;
+  },
   handler: (req, res) => {
     logger.warn('🚨 Rate limit excedido desde IP: %s', req.ip);
     res.status(429).json({ error: 'Too many requests, please try again later.' });
@@ -91,9 +98,13 @@ if (isProduction) {
 
 // Rutas públicas API
 app.use('/webhook', webhookLimiter, webhookRouter);
-app.use('/auth', authRouter); // Login/Logout
 
-// Rutas protegidas API
+// Rutas de API para React (con prefijo /api)
+app.use('/api/auth', authRouter); // Login/Logout
+app.use('/api', dashboardRouter); // Dashboard endpoints
+
+// Rutas legacy (para retrocompatibilidad)
+app.use('/auth', authRouter);
 app.use('/dashboard', dashboardRouter);
 
 // En producción, cualquier ruta no encontrada sirve el index.html del React app
