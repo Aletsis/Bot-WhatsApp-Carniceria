@@ -2,6 +2,7 @@ import WhatsappService from '../services/whatsappService.js';
 import SessionService from '../services/sessionService.js';
 import DBService from '../services/dbService.js';
 import { clearSessionTimeout, resetSessionTimeout } from '../services/sessionTimeoutService.js';
+import { saveMessage } from '../services/messageService.js';
 import logger from '../logger.js';
 import { handleButton } from '../handlers/buttonHandlers.js';
 import {
@@ -57,6 +58,23 @@ export async function messageWebhookHandler(req, res) {
     const numeroCorregido = from;
 
     logger.info('📱 Mensaje recibido de %s | texto="%s" | botón=%s', from, text.substring(0, 50), buttonId || 'ninguno');
+
+    // Guardar mensaje recibido en BD
+    try {
+      const tipoMensaje = message.type || 'text';
+      const contenido = text || (buttonId ? `[Botón: ${buttonId}]` : '[Mensaje interactivo]');
+      const metadata = {
+        messageId: message.id,
+        timestamp: message.timestamp,
+        type: message.type,
+        interactive: message.interactive || null
+      };
+      
+      await saveMessage(from, 'recibido', contenido, tipoMensaje, metadata);
+    } catch (saveErr) {
+      logger.error('[webhookController] Error guardando mensaje recibido:', saveErr);
+      // No interrumpir el flujo si falla el guardado
+    }
 
     // Comando global para cancelar/reiniciar
     const textLower = text.trim().toLowerCase();

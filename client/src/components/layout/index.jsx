@@ -66,6 +66,11 @@ export const Sidebar = ({ isOpen, onClose }) => {
       path: '/dashboard/conversaciones',
       icon: '💬',
     },
+    {
+      name: 'Historial Chats',
+      path: '/dashboard/chats',
+      icon: '📱',
+    },
   ];
 
   if (isAdmin) {

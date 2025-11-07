@@ -1,6 +1,7 @@
 import sql from 'mssql';
 import { getPool } from '../services/dbService.js';
 import * as userService from '../services/userService.js';
+import * as messageService from '../services/messageService.js';
 import logger from '../logger.js';
 import { getActiveTimeouts } from '../services/sessionTimeoutService.js';
 import { printTicket } from '../services/printingService.js';
@@ -899,6 +900,136 @@ export async function getConfiguracionesPorCategoria(req, res) {
     res.json({ success: true, data: configs });
   } catch (err) {
     logger.error('❌ Error obteniendo configuraciones de %s:', req.params.categoria, err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+// ===================================
+// ENDPOINTS DE CHATS (HISTORIAL)
+// ===================================
+
+/**
+ * Obtiene la lista de todas las conversaciones
+ */
+export async function getConversationList(req, res) {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    const conversations = await messageService.getConversationList(limit, offset);
+    
+    res.json({ 
+      success: true, 
+      conversations,
+      pagination: {
+        limit,
+        offset,
+        hasMore: conversations.length === limit
+      }
+    });
+  } catch (err) {
+    logger.error('❌ Error obteniendo lista de conversaciones:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Obtiene el historial de mensajes de un cliente específico
+ */
+export async function getMessageHistory(req, res) {
+  try {
+    const { telefono } = req.params;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+    
+    if (!telefono) {
+      return res.status(400).json({ success: false, error: 'Número de teléfono requerido' });
+    }
+    
+    const [messages, total] = await Promise.all([
+      messageService.getMessageHistory(telefono, limit, offset),
+      messageService.getMessageCount(telefono)
+    ]);
+    
+    res.json({ 
+      success: true, 
+      messages,
+      total,
+      pagination: {
+        limit,
+        offset,
+        hasMore: offset + messages.length < total
+      }
+    });
+  } catch (err) {
+    logger.error('❌ Error obteniendo historial de mensajes:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Marca mensajes de un cliente como leídos
+ */
+export async function markMessagesAsRead(req, res) {
+  try {
+    const { telefono } = req.params;
+    
+    if (!telefono) {
+      return res.status(400).json({ success: false, error: 'Número de teléfono requerido' });
+    }
+    
+    const updated = await messageService.markMessagesAsRead(telefono);
+    
+    res.json({ 
+      success: true, 
+      message: `${updated} mensaje(s) marcado(s) como leído(s)`,
+      updated
+    });
+  } catch (err) {
+    logger.error('❌ Error marcando mensajes como leídos:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Busca mensajes por contenido
+ */
+export async function searchMessages(req, res) {
+  try {
+    const { q } = req.query;
+    const limit = parseInt(req.query.limit) || 50;
+    
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Término de búsqueda requerido (parámetro "q")' });
+    }
+    
+    const results = await messageService.searchMessages(q, limit);
+    
+    res.json({ 
+      success: true, 
+      results,
+      count: results.length,
+      searchTerm: q
+    });
+  } catch (err) {
+    logger.error('❌ Error buscando mensajes:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Obtiene estadísticas de mensajes
+ */
+export async function getMessageStats(req, res) {
+  try {
+    const stats = await messageService.getMessageStats();
+    
+    res.json({ 
+      success: true, 
+      stats
+    });
+  } catch (err) {
+    logger.error('❌ Error obteniendo estadísticas de mensajes:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 }

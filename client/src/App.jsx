@@ -5,6 +5,7 @@ import LoginPage from './pages/LoginPage';
 import PedidosPage from './pages/PedidosPage';
 import ClientesPage from './pages/ClientesPage';
 import ConversacionesPage from './pages/ConversacionesPage';
+import ChatsPage from './pages/ChatsPage';
 import UsuariosPage from './pages/UsuariosPage';
 import ConfiguracionPage from './pages/ConfiguracionPage';
 
@@ -42,6 +43,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <ConversacionesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard/chats"
+            element={
+              <ProtectedRoute>
+                <ChatsPage />
               </ProtectedRoute>
             }
           />

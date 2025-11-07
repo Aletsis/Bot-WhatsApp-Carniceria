@@ -3,6 +3,7 @@ import axiosRetry from 'axios-retry';
 import dotenv from 'dotenv';
 import dbService from '../services/dbService.js';
 import * as configService from '../services/configService.js';
+import { saveMessage } from '../services/messageService.js';
 import logger from '../logger.js';
 
 dotenv.config();
@@ -127,6 +128,22 @@ async function apiSend(payload) {
           logger.info('✅ Mensaje enviado a %s - ID: %s', to, res.data.messages[0]?.id);
         }
         
+        // Guardar mensaje enviado en BD
+        try {
+          const contenido = extractMessageContent(payload);
+          const tipoMensaje = payload.type || 'text';
+          const metadata = {
+            messageId: res.data.messages?.[0]?.id,
+            whatsappStatus: res.data.messages?.[0]?.message_status,
+            timestamp: new Date().toISOString()
+          };
+          
+          await saveMessage(to, 'enviado', contenido, tipoMensaje, metadata);
+        } catch (saveErr) {
+          logger.error('[whatsappService] Error guardando mensaje enviado:', saveErr);
+          // No interrumpir el flujo si falla el guardado
+        }
+        
         return res.data;
     } catch (err) {
         // Distinguir tipos de error
@@ -157,6 +174,25 @@ async function apiSend(payload) {
         
         throw err;
     }
+}
+
+/**
+ * Extrae el contenido de texto de un payload de WhatsApp
+ * Soporta mensajes de texto, interactivos, etc.
+ */
+function extractMessageContent(payload) {
+  if (payload.type === 'text') {
+    return payload.text?.body || '[Mensaje de texto sin contenido]';
+  } else if (payload.type === 'interactive') {
+    const interactive = payload.interactive;
+    if (interactive.type === 'button') {
+      return interactive.body?.text || '[Mensaje con botones]';
+    } else if (interactive.type === 'list') {
+      return interactive.body?.text || '[Mensaje con lista]';
+    }
+  }
+  
+  return `[Mensaje tipo: ${payload.type}]`;
 }
 
 export default {

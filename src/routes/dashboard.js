@@ -31,6 +31,13 @@ router.get('/clientes/:clienteId/pedidos', dashboardController.getPedidosCliente
 // API endpoints - Conversaciones
 router.get('/conversaciones', dashboardController.getSesionesActivas);
 
+// API endpoints - Chats (Historial de Mensajes)
+router.get('/chats', dashboardController.getConversationList);
+router.get('/chats/:telefono', dashboardController.getMessageHistory);
+router.post('/chats/:telefono/mark-read', dashboardController.markMessagesAsRead);
+router.get('/chats/search', dashboardController.searchMessages);
+router.get('/chats/stats', dashboardController.getMessageStats);
+
 // API endpoints - Usuarios (solo para admins)
 router.get('/usuarios', requireRole('admin'), dashboardController.getUsuarios);
 router.post('/usuarios', requireRole('admin'), dashboardController.createUsuario);
