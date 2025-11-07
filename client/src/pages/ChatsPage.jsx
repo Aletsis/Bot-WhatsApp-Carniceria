@@ -12,6 +12,7 @@ export default function ChatsPage() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchMode, setSearchMode] = useState('conversations'); // 'conversations' o 'messages'
   const [stats, setStats] = useState(null);
   const messagesEndRef = useRef(null);
 
@@ -102,25 +103,54 @@ export default function ChatsPage() {
     e.preventDefault();
     
     if (!searchTerm.trim()) {
+      // Si está vacío, recargar lista normal
+      loadConversations();
+      setMessages([]);
+      setSelectedPhone(null);
       return;
     }
     
     try {
       setLoading(true);
-      const response = await api.get('/dashboard/chats/search', {
-        params: { q: searchTerm, limit: 50 }
-      });
       
-      if (response.data.success) {
-        setMessages(response.data.results);
-        setSelectedPhone(null); // Limpiar selección de conversación
+      if (searchMode === 'conversations') {
+        // Buscar por nombre o teléfono (filtrar conversaciones)
+        const response = await api.get('/dashboard/chats/search-conversations', {
+          params: { q: searchTerm, limit: 50 }
+        });
+        
+        if (response.data.success) {
+          setConversations(response.data.conversations);
+          setMessages([]);
+          setSelectedPhone(null);
+        }
+      } else {
+        // Buscar en contenido de mensajes
+        const response = await api.get('/dashboard/chats/search', {
+          params: { q: searchTerm, limit: 50 }
+        });
+        
+        if (response.data.success) {
+          setMessages(response.data.results);
+          setSelectedPhone(null);
+        }
       }
     } catch (error) {
-      console.error('Error buscando mensajes:', error);
+      console.error('Error buscando:', error);
       alert('Error en la búsqueda');
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Limpia la búsqueda y vuelve a la vista normal
+   */
+  const clearSearch = () => {
+    setSearchTerm('');
+    setMessages([]);
+    setSelectedPhone(null);
+    loadConversations();
   };
 
   /**
@@ -219,14 +249,50 @@ export default function ChatsPage() {
         )}
 
         <form onSubmit={handleSearch} className="search-form">
-          <input
-            type="text"
-            placeholder="Buscar en mensajes..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-          <button type="submit" className="search-btn">🔍 Buscar</button>
+          <div className="search-input-group">
+            <input
+              type="text"
+              placeholder={searchMode === 'conversations' 
+                ? "Buscar por nombre o teléfono..." 
+                : "Buscar en contenido de mensajes..."}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="search-input"
+            />
+            {searchTerm && (
+              <button 
+                type="button" 
+                onClick={clearSearch}
+                className="clear-search-btn"
+                title="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          
+          <div className="search-mode-toggle">
+            <button
+              type="button"
+              className={`mode-btn ${searchMode === 'conversations' ? 'active' : ''}`}
+              onClick={() => setSearchMode('conversations')}
+              title="Buscar conversaciones por nombre o teléfono"
+            >
+              👥 Contactos
+            </button>
+            <button
+              type="button"
+              className={`mode-btn ${searchMode === 'messages' ? 'active' : ''}`}
+              onClick={() => setSearchMode('messages')}
+              title="Buscar en contenido de mensajes"
+            >
+              💬 Mensajes
+            </button>
+          </div>
+          
+          <button type="submit" className="search-btn" disabled={!searchTerm.trim()}>
+            🔍 Buscar
+          </button>
         </form>
       </div>
 

@@ -1033,3 +1033,29 @@ export async function getMessageStats(req, res) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
+
+/**
+ * Busca conversaciones por nombre o teléfono
+ */
+export async function searchConversations(req, res) {
+  try {
+    const { q } = req.query;
+    const limit = parseInt(req.query.limit) || 50;
+    
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Término de búsqueda requerido (parámetro "q")' });
+    }
+    
+    const results = await messageService.searchConversations(q, limit);
+    
+    res.json({ 
+      success: true, 
+      conversations: results,
+      count: results.length,
+      searchTerm: q
+    });
+  } catch (err) {
+    logger.error('❌ Error buscando conversaciones:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}

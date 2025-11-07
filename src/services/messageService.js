@@ -212,7 +212,7 @@ export async function markMessagesAsRead(numeroTelefono) {
 }
 
 /**
- * Busca mensajes por contenido
+ * Busca mensajes por contenido, nombre de cliente o número de teléfono
  * 
  * @param {string} searchTerm - Término de búsqueda
  * @param {number} limit - Número máximo de resultados (default: 50)
@@ -238,6 +238,8 @@ export async function searchMessages(searchTerm, limit = 50) {
         FROM Mensajes m
         LEFT JOIN Clientes c ON m.NumeroTelefono = c.NumeroTelefono
         WHERE m.Contenido LIKE @SearchTerm
+           OR m.NumeroTelefono LIKE @SearchTerm
+           OR c.Nombre LIKE @SearchTerm
         ORDER BY m.Fecha DESC
       `);
     
@@ -273,6 +275,57 @@ export async function getMessageStats() {
     return result.recordset[0];
   } catch (error) {
     logger.error('[messageService] Error obteniendo estadísticas:', error);
+    throw error;
+  }
+}
+
+/**
+ * Busca conversaciones por nombre de cliente o número de teléfono
+ * 
+ * @param {string} searchTerm - Término de búsqueda
+ * @param {number} limit - Número máximo de resultados (default: 50)
+ * @returns {Promise<Array>} Array de conversaciones que coinciden con la búsqueda
+ */
+export async function searchConversations(searchTerm, limit = 50) {
+  const pool = await getPool();
+  
+  try {
+    const result = await pool
+      .request()
+      .input('SearchTerm', `%${searchTerm}%`)
+      .input('Limit', limit)
+      .query(`
+        WITH UltimosMensajes AS (
+          SELECT 
+            NumeroTelefono,
+            MAX(Fecha) AS UltimaFecha
+          FROM Mensajes
+          GROUP BY NumeroTelefono
+        ),
+        MensajesConCliente AS (
+          SELECT 
+            m.NumeroTelefono,
+            m.Contenido AS UltimoMensaje,
+            m.Tipo AS TipoUltimoMensaje,
+            m.Fecha AS UltimaFecha,
+            c.Nombre AS NombreCliente,
+            (SELECT COUNT(*) FROM Mensajes WHERE NumeroTelefono = m.NumeroTelefono AND Tipo = 'recibido' AND Estado = 'entregado') AS MensajesNoLeidos
+          FROM Mensajes m
+          INNER JOIN UltimosMensajes um ON m.NumeroTelefono = um.NumeroTelefono AND m.Fecha = um.UltimaFecha
+          LEFT JOIN Clientes c ON m.NumeroTelefono = c.NumeroTelefono
+          WHERE m.NumeroTelefono LIKE @SearchTerm
+             OR c.Nombre LIKE @SearchTerm
+        )
+        SELECT TOP (@Limit) *
+        FROM MensajesConCliente
+        ORDER BY UltimaFecha DESC
+      `);
+    
+    logger.info(`[messageService] Búsqueda de conversaciones: Termino="${searchTerm}", Resultados=${result.recordset.length}`);
+    
+    return result.recordset;
+  } catch (error) {
+    logger.error('[messageService] Error buscando conversaciones:', error);
     throw error;
   }
 }
