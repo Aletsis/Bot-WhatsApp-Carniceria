@@ -13,13 +13,11 @@ export default function ChatsPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState('conversations'); // 'conversations' o 'messages'
-  const [stats, setStats] = useState(null);
   const messagesEndRef = useRef(null);
 
   // Cargar lista de conversaciones al montar
   useEffect(() => {
     loadConversations();
-    loadStats();
   }, []);
 
   // Auto-scroll cuando cambian los mensajes
@@ -49,20 +47,6 @@ export default function ChatsPage() {
       alert('Error al cargar conversaciones');
     } finally {
       setLoading(false);
-    }
-  };
-
-  /**
-   * Carga las estadísticas generales
-   */
-  const loadStats = async () => {
-    try {
-      const response = await api.get('/dashboard/chats/stats');
-      if (response.data.success) {
-        setStats(response.data.stats);
-      }
-    } catch (error) {
-      console.error('Error cargando estadísticas:', error);
     }
   };
 
@@ -230,23 +214,6 @@ export default function ChatsPage() {
     <div className="chats-page">
       <div className="chats-header">
         <h1>💬 Historial de Chats</h1>
-        
-        {stats && (
-          <div className="chats-stats">
-            <div className="stat-card">
-              <span className="stat-value">{stats.TotalConversaciones}</span>
-              <span className="stat-label">Conversaciones</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">{stats.TotalMensajes}</span>
-              <span className="stat-label">Mensajes Totales</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value">{stats.MensajesUltimas24h}</span>
-              <span className="stat-label">Últimas 24h</span>
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSearch} className="search-form">
           <div className="search-input-group">
