@@ -86,33 +86,54 @@ Mejorar la seguridad del sistema, agregar funcionalidades críticas de gestión,
 
 ---
 
-### 🔴 Tarea 4: Historial de Chats con Persistencia (Alta Prioridad)
+### ✅ Tarea 4: Historial de Chats con Persistencia (Alta Prioridad)
 **Objetivo:** Guardar y visualizar todo el historial de conversaciones
 
-**Subtareas:**
-- [ ] Crear tabla `Mensajes` en BD:
-  - `MensajeID, NumeroTelefono, Tipo (enviado/recibido), Contenido, Fecha, Estado`
-- [ ] Migración para crear tabla
-- [ ] Guardar mensajes entrantes en webhook
-- [ ] Guardar mensajes salientes en whatsappService
-- [ ] Endpoint `/api/mensajes/:telefono` para obtener historial
-- [ ] Página `/chats` en dashboard
-- [ ] Componente de visualización de chat estilo WhatsApp
-- [ ] Búsqueda de conversaciones por teléfono/nombre
-- [ ] Paginación de mensajes antiguos
+**Estado:** ✅ COMPLETADA (Commit: 7f823ad - 18/01/2025)
 
-**Archivos Afectados:**
-- `migrations/05_historial_mensajes.sql` (nuevo)
-- `src/services/messageService.js` (nuevo)
-- `src/controllers/dashboardController.js`
-- `src/routes/dashboard.js`
-- `client/src/pages/ChatsPage.jsx` (nuevo)
+**Subtareas Completadas:**
+- [x] Crear tabla `Mensajes` en BD (migración 13):
+  - `MensajeID, NumeroTelefono, Tipo, Contenido, TipoMensaje, MetadataWhatsApp, Estado, Fecha`
+  - Índices optimizados: IX_Mensajes_Telefono_Fecha, IX_Mensajes_Fecha
+- [x] Migración ejecutada exitosamente
+- [x] Guardar mensajes entrantes en webhook con metadatos
+- [x] Guardar mensajes salientes en whatsappService
+- [x] Servicio completo `messageService.js` con 7 funciones
+- [x] Endpoints API completos:
+  - `GET /dashboard/chats` - Lista conversaciones
+  - `GET /dashboard/chats/:telefono` - Historial
+  - `POST /dashboard/chats/:telefono/mark-read` - Marcar leídos
+  - `GET /dashboard/chats/search` - Búsqueda
+  - `GET /dashboard/chats/stats` - Estadísticas
+- [x] Página `/dashboard/chats` con UI estilo WhatsApp
+- [x] Componente de visualización de chat con burbujas diferenciadas
+- [x] Búsqueda de conversaciones por teléfono/nombre
+- [x] Paginación de mensajes antiguos
+- [x] Estadísticas en tiempo real (24h, 7d, totales)
+- [x] Badges de mensajes no leídos
+- [x] Scripts de testing y migración
 
-**Estimación:** 3-4 horas
+**Archivos Creados/Modificados:**
+- ✅ `migrations/13_mensajes_table.sql`
+- ✅ `src/services/messageService.js` (367 líneas)
+- ✅ `src/controllers/dashboardController.js` (+130 líneas)
+- ✅ `src/controllers/webhookController.js` (integración guardado)
+- ✅ `src/services/whatsappService.js` (integración guardado)
+- ✅ `src/routes/dashboard.js` (+5 endpoints)
+- ✅ `client/src/pages/ChatsPage.jsx` (303 líneas)
+- ✅ `client/src/pages/ChatsPage.css` (447 líneas)
+- ✅ `client/src/App.jsx` (nueva ruta)
+- ✅ `client/src/components/layout/index.jsx` (enlace sidebar)
+- ✅ `scripts/run-mensajes-migration.js`
+- ✅ `scripts/test-messages.js`
+
+**Resultado:** 💬 Sistema completo de historial de chats con persistencia. Todos los mensajes se guardan automáticamente. UI moderna estilo WhatsApp con búsqueda y estadísticas.
+
+**Estimación:** ~~3-4 horas~~ → **Tiempo real: 3 horas**
 
 ---
 
-### 🟡 Tarea 5: Página de Configuración (Media-Alta Prioridad)
+### ✅ Tarea 5: Página de Configuración (Media-Alta Prioridad - COMPLETADA PREVIAMENTE)
 **Objetivo:** Permitir configurar impresora, credenciales de WhatsApp y otros ajustes desde el dashboard
 
 **Subtareas:**
