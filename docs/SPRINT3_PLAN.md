@@ -86,10 +86,10 @@ Mejorar la seguridad del sistema, agregar funcionalidades críticas de gestión,
 
 ---
 
-### ✅ Tarea 4: Historial de Chats con Persistencia (Alta Prioridad)
+### ✅ Tarea 4: Historial de Chats con Persistencia (Alta Prioridad) ✅ COMPLETADA
 **Objetivo:** Guardar y visualizar todo el historial de conversaciones
 
-**Estado:** ✅ COMPLETADA (Commit: 7f823ad - 18/01/2025)
+**Estado:** ✅ COMPLETADA (Commit: e04770b - 06/11/2025)
 
 **Subtareas Completadas:**
 - [x] Crear tabla `Mensajes` en BD (migración 13):
@@ -98,38 +98,63 @@ Mejorar la seguridad del sistema, agregar funcionalidades críticas de gestión,
 - [x] Migración ejecutada exitosamente
 - [x] Guardar mensajes entrantes en webhook con metadatos
 - [x] Guardar mensajes salientes en whatsappService
-- [x] Servicio completo `messageService.js` con 7 funciones
-- [x] Endpoints API completos:
+- [x] Servicio completo `messageService.js` con 9 funciones
+- [x] Endpoints API completos (8 endpoints):
   - `GET /dashboard/chats` - Lista conversaciones
-  - `GET /dashboard/chats/:telefono` - Historial
+  - `GET /dashboard/chats/:telefono` - Historial completo
   - `POST /dashboard/chats/:telefono/mark-read` - Marcar leídos
-  - `GET /dashboard/chats/search` - Búsqueda
+  - `GET /dashboard/chats/search` - Búsqueda en mensajes
+  - `GET /dashboard/chats/search-conversations` - Búsqueda en conversaciones
+  - `POST /dashboard/chats/:telefono/send` - Enviar mensaje desde dashboard
   - `GET /dashboard/chats/stats` - Estadísticas
 - [x] Página `/dashboard/chats` con UI estilo WhatsApp
 - [x] Componente de visualización de chat con burbujas diferenciadas
-- [x] Búsqueda de conversaciones por teléfono/nombre
+- [x] Búsqueda dual-mode (contactos vs mensajes) con toggle UI
+- [x] Búsqueda multi-campo: nombre, teléfono y contenido de mensaje
+- [x] Visualización de botones interactivos en historial
+- [x] Envío de mensajes directos a clientes desde dashboard
+- [x] Auto-actualización después de enviar mensaje
+- [x] Atajo de teclado Ctrl+Enter para envío rápido
 - [x] Paginación de mensajes antiguos
-- [x] Estadísticas en tiempo real (24h, 7d, totales)
 - [x] Badges de mensajes no leídos
+- [x] Auto-scroll al último mensaje
+- [x] Estados de carga y validación
 - [x] Scripts de testing y migración
 
 **Archivos Creados/Modificados:**
 - ✅ `migrations/13_mensajes_table.sql`
-- ✅ `src/services/messageService.js` (367 líneas)
-- ✅ `src/controllers/dashboardController.js` (+130 líneas)
+- ✅ `src/services/messageService.js` (457 líneas, +90)
+- ✅ `src/controllers/dashboardController.js` (+180 líneas)
 - ✅ `src/controllers/webhookController.js` (integración guardado)
 - ✅ `src/services/whatsappService.js` (integración guardado)
-- ✅ `src/routes/dashboard.js` (+5 endpoints)
-- ✅ `client/src/pages/ChatsPage.jsx` (303 líneas)
-- ✅ `client/src/pages/ChatsPage.css` (447 líneas)
+- ✅ `src/routes/dashboard.js` (+8 endpoints)
+- ✅ `client/src/pages/ChatsPage.jsx` (465 líneas, +162)
+- ✅ `client/src/pages/ChatsPage.css` (584 líneas, +137)
 - ✅ `client/src/App.jsx` (nueva ruta)
 - ✅ `client/src/components/layout/index.jsx` (enlace sidebar)
 - ✅ `scripts/run-mensajes-migration.js`
 - ✅ `scripts/test-messages.js`
+- ✅ `scripts/test-button-messages.js`
+- ✅ `scripts/test-search.js`
+- ✅ `scripts/test-send-message.js`
 
-**Resultado:** 💬 Sistema completo de historial de chats con persistencia. Todos los mensajes se guardan automáticamente. UI moderna estilo WhatsApp con búsqueda y estadísticas.
+**Características Implementadas:**
+- 💬 Historial completo persistente de todos los mensajes
+- 🔍 Búsqueda avanzada multi-campo (nombre, teléfono, contenido)
+- 🎛️ Modo dual de búsqueda (conversaciones o mensajes)
+- 🔘 Visualización de botones interactivos enviados al cliente
+- ✉️ Envío de mensajes directos a clientes desde dashboard
+- 📱 Interfaz estilo WhatsApp Web con burbujas diferenciadas
+- 🔄 Auto-actualización y auto-scroll después de enviar
+- ⌨️ Atajo Ctrl+Enter para envío rápido
+- 📊 Estadísticas en tiempo real (24h, 7d, totales)
+- ✓✓ Check marks en mensajes enviados
+- 🔔 Badges de mensajes no leídos
+- 🎨 UI moderna y responsive
 
-**Estimación:** ~~3-4 horas~~ → **Tiempo real: 3 horas**
+**Resultado:** 💬 Sistema completo de comunicación bidireccional. Los operadores pueden ver historial completo, buscar en conversaciones y responder directamente desde el dashboard. Interfaz profesional similar a WhatsApp Web.
+
+**Estimación:** ~~3-4 horas~~ → **Tiempo real: 4.5 horas** (incluyendo búsqueda avanzada y envío de mensajes)
 
 ---
 

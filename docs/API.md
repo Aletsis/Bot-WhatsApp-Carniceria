@@ -254,7 +254,177 @@ Obtiene la lista de conversaciones activas.
 
 ---
 
-## 👤 Usuarios
+## � Historial de Chats
+
+Endpoints para gestionar el historial completo de mensajes y conversaciones.
+
+### GET `/api/dashboard/chats`
+
+Obtiene la lista de conversaciones con su último mensaje.
+
+**Query Parameters:**
+- `limit` (opcional): Número máximo de conversaciones (default: 50)
+- `offset` (opcional): Desplazamiento para paginación (default: 0)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "conversations": [
+    {
+      "NumeroTelefono": "5218123456789",
+      "NombreCliente": "Juan Pérez",
+      "UltimoMensaje": "Hola, quiero hacer un pedido",
+      "UltimaFecha": "2024-11-06T10:30:00",
+      "TipoUltimoMensaje": "recibido",
+      "MensajesNoLeidos": 2
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/dashboard/chats/:telefono`
+
+Obtiene el historial completo de mensajes con un cliente específico.
+
+**Path Parameters:**
+- `telefono`: Número de teléfono del cliente
+
+**Query Parameters:**
+- `limit` (opcional): Número máximo de mensajes (default: 100)
+- `offset` (opcional): Desplazamiento para paginación (default: 0)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "messages": [
+    {
+      "MensajeID": 123,
+      "NumeroTelefono": "5218123456789",
+      "Tipo": "recibido",
+      "Contenido": "Hola, quiero hacer un pedido",
+      "Fecha": "2024-11-06T10:30:00",
+      "Leido": true,
+      "MetadataWhatsApp": {
+        "messageId": "wamid.xxx",
+        "from": "5218123456789"
+      }
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/dashboard/chats/search`
+
+Busca mensajes por contenido, nombre de cliente o número de teléfono.
+
+**Query Parameters:**
+- `q`: Término de búsqueda
+- `limit` (opcional): Número máximo de resultados (default: 50)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "results": [
+    {
+      "MensajeID": 123,
+      "NumeroTelefono": "5218123456789",
+      "NombreCliente": "Juan Pérez",
+      "Tipo": "recibido",
+      "Contenido": "Hola, quiero hacer un pedido",
+      "Fecha": "2024-11-06T10:30:00"
+    }
+  ]
+}
+```
+
+---
+
+### GET `/api/dashboard/chats/search-conversations`
+
+Filtra conversaciones por nombre de cliente o número de teléfono.
+
+**Query Parameters:**
+- `q`: Término de búsqueda
+- `limit` (opcional): Número máximo de resultados (default: 50)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "conversations": [
+    {
+      "NumeroTelefono": "5218123456789",
+      "NombreCliente": "Juan Pérez",
+      "UltimoMensaje": "Gracias por su pedido",
+      "UltimaFecha": "2024-11-06T10:30:00",
+      "TipoUltimoMensaje": "enviado",
+      "MensajesNoLeidos": 0
+    }
+  ]
+}
+```
+
+---
+
+### POST `/api/dashboard/chats/:telefono/send`
+
+Envía un mensaje de texto al cliente desde el dashboard.
+
+**Path Parameters:**
+- `telefono`: Número de teléfono del cliente
+
+**Request Body:**
+```json
+{
+  "mensaje": "Hola, su pedido está en camino"
+}
+```
+
+**Response Success (200):**
+```json
+{
+  "success": true,
+  "message": "Mensaje enviado exitosamente",
+  "telefono": "5218123456789",
+  "sentBy": "admin"
+}
+```
+
+**Response Error (400):**
+```json
+{
+  "success": false,
+  "error": "Mensaje no puede estar vacío"
+}
+```
+
+---
+
+### POST `/api/dashboard/chats/:telefono/mark-read`
+
+Marca todos los mensajes de una conversación como leídos.
+
+**Path Parameters:**
+- `telefono`: Número de teléfono del cliente
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Mensajes marcados como leídos"
+}
+```
+
+---
+
+## �👤 Usuarios
 
 Todos los endpoints de usuarios **requieren rol: admin**
 
@@ -449,6 +619,12 @@ El valor de `hub.challenge` como texto plano.
 | PUT /api/clientes/:id | ✅ | ✅ | ❌ |
 | DELETE /api/clientes/:id | ✅ | ✅ | ❌ |
 | GET /api/conversaciones | ✅ | ✅ | ✅ |
+| GET /api/dashboard/chats | ✅ | ✅ | ✅ |
+| GET /api/dashboard/chats/:telefono | ✅ | ✅ | ✅ |
+| GET /api/dashboard/chats/search | ✅ | ✅ | ✅ |
+| GET /api/dashboard/chats/search-conversations | ✅ | ✅ | ✅ |
+| POST /api/dashboard/chats/:telefono/send | ✅ | ✅ | ❌ |
+| POST /api/dashboard/chats/:telefono/mark-read | ✅ | ✅ | ✅ |
 | GET /api/usuarios | ✅ | ❌ | ❌ |
 | POST /api/usuarios | ✅ | ❌ | ❌ |
 | POST /api/usuarios/:id/cambiar-password | ✅ | ❌ | ❌ |

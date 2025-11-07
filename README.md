@@ -44,6 +44,12 @@ Bot automatizado de WhatsApp Business para gestión de pedidos de carnicería co
 - **Context API** para gestión de estado de autenticación
 - **Vista de pedidos en tiempo real** con filtros por estado
 - **Gestión completa de clientes** (agregar, editar, desactivar)
+- **Historial de chats completo** con búsqueda avanzada
+  - Búsqueda por nombre, teléfono o contenido de mensaje
+  - Visualización de botones interactivos enviados
+  - Envío de mensajes directos a clientes
+  - Interfaz similar a WhatsApp Web
+  - Auto-actualización y scroll automático
 - **Consulta de conversaciones** activas y historial
 - **Gestión de usuarios** con roles (admin, editor, viewer)
 - **Métricas y estadísticas** en tiempo real
