@@ -159,12 +159,12 @@ const server = app.listen(PORT, () => {
 // Inicializar base de datos
 async function initApp() {
   try {
-    // Primero inicializar el pool global a la BD principal
+    // Primero verificar/crear la base de datos (esto NO necesita el pool de CarniceriaDB)
+    await initializeDatabase();
+    
+    // Ahora que la BD existe, inicializar el pool global a la BD principal
     await getPool();
     logger.info('[DB Init] 🔌 Pool de conexión inicializado');
-    
-    // Ahora podemos inicializar la base de datos que usará el pool compartido
-    await initializeDatabase();
     
     // Validar configuración de seguridad del webhook
     logger.info('🔐 Validando configuración de seguridad...');

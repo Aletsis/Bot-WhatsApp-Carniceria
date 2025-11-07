@@ -33,9 +33,10 @@ import { getPool } from './dbService.js';
 /**
  * Verifica si la base de datos existe
  * @param {string} dbName - Nombre de la base de datos
+ * @param {boolean} closePool - Si debe cerrar el pool después (default: false para flujos internos)
  * @returns {Promise<boolean>}
  */
-async function checkDatabaseExists(dbName) {
+async function checkDatabaseExists(dbName, closePool = false) {
   const config = {
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
@@ -50,18 +51,25 @@ async function checkDatabaseExists(dbName) {
 
   let pool;
   try {
-    pool = await sql.connect(config);
+    pool = new sql.ConnectionPool(config);
+    await pool.connect();
+    
     const result = await pool.request()
       .input('dbName', sql.NVarChar, dbName)
       .query('SELECT database_id FROM sys.databases WHERE name = @dbName');
     
-    return result.recordset.length > 0;
+    const exists = result.recordset.length > 0;
+    
+    if (closePool) {
+      await pool.close();
+    }
+    
+    return exists;
   } catch (err) {
     logger.error('[DB Init] Error verificando base de datos:', err.message);
+    if (pool && closePool) await pool.close();
     throw err;
   }
-  // NO cerrar el pool - mssql gestiona las conexiones internamente
-  // Cerrar puede afectar a otras referencias del pool global
 }
 
 /**
@@ -81,18 +89,24 @@ async function createDatabase(dbName) {
     }
   };
 
-  let pool;
   try {
     logger.info('[DB Init] 🔨 Creando base de datos %s...', dbName);
-    pool = await sql.connect(config);
+    
+    // Crear conexión a master para crear la BD
+    let masterPool = new sql.ConnectionPool(config);
+    await masterPool.connect();
     
     // Crear la base de datos
-    await pool.request()
+    await masterPool.request()
       .query(`CREATE DATABASE [${dbName}]`);
     
     logger.info('[DB Init] ✅ Base de datos creada exitosamente');
     
-    // NO cerrar - mssql gestiona las conexiones internamente
+    // Cerrar conexión a master
+    await masterPool.close();
+    
+    // Esperar un momento para que SQL Server termine de crear la BD
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     // Conectarse a la nueva base de datos para crear tablas
     const dbConfig = {
@@ -100,7 +114,9 @@ async function createDatabase(dbName) {
       database: dbName
     };
     
-    pool = await sql.connect(dbConfig);
+    logger.info('[DB Init] 📋 Conectando a %s para crear tablas...', dbName);
+    const pool = new sql.ConnectionPool(dbConfig);
+    await pool.connect();
     
     logger.info('[DB Init] 📋 Creando tablas...');
     
@@ -361,11 +377,14 @@ async function createDatabase(dbName) {
     
     logger.info('[DB Init] 🎉 Base de datos inicializada completamente');
     
+    // Cerrar el pool de la base de datos recién creada
+    await pool.close();
+    
   } catch (err) {
     logger.error('[DB Init] ❌ Error creando base de datos:', err.message);
+    logger.error('[DB Init] Stack:', err.stack);
     throw err;
   }
-  // NO cerrar el pool - mssql gestiona las conexiones internamente
 }
 
 /**
