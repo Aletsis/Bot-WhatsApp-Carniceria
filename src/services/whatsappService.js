@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import dbService from '../services/dbService.js';
 import * as configService from '../services/configService.js';
 import { saveMessage } from '../services/messageService.js';
+import { notifyAdmins } from '../services/notificationService.js';
 import logger from '../logger.js';
 
 dotenv.config();
@@ -157,12 +158,79 @@ async function apiSend(payload) {
           // Errores comunes
           if (status === 401) {
             logger.error('🔑 Token de WhatsApp inválido o expirado');
+            
+            // Notificar error crítico de autenticación
+            await notifyAdmins(
+              'WHATSAPP_API_ERROR',
+              `Error de autenticación en WhatsApp API.\n\n` +
+              `Error: Token inválido o expirado (401)\n` +
+              `Destinatario afectado: ${to}\n\n` +
+              `Acción recomendada:\n` +
+              `1. Verificar WHATSAPP_TOKEN en configuraciones\n` +
+              `2. Renovar token si es necesario\n` +
+              `3. Actualizar token en el dashboard`,
+              {
+                severidad: 'CRITICAL',
+                metadata: {
+                  status,
+                  to,
+                  errorData
+                }
+              }
+            ).catch(notifyError => {
+              logger.error('Error enviando notificación:', notifyError.message);
+            });
+            
           } else if (status === 404) {
             logger.error('📞 Número de teléfono no válido o Phone Number ID incorrecto: %s', to);
           } else if (status === 429) {
             logger.error('🚦 Rate limit excedido en WhatsApp API');
+            
+            // Notificar rate limit excedido
+            await notifyAdmins(
+              'WHATSAPP_API_ERROR',
+              `Rate limit excedido en WhatsApp API.\n\n` +
+              `El sistema está enviando demasiados mensajes.\n` +
+              `Destinatario afectado: ${to}\n\n` +
+              `Acción recomendada:\n` +
+              `1. Revisar frecuencia de envío de mensajes\n` +
+              `2. Implementar cola de mensajes si no existe\n` +
+              `3. Contactar soporte de WhatsApp Business`,
+              {
+                severidad: 'WARNING',
+                metadata: {
+                  status,
+                  to,
+                  errorData
+                }
+              }
+            ).catch(notifyError => {
+              logger.error('Error enviando notificación:', notifyError.message);
+            });
+            
           } else if (status >= 500) {
             logger.error('🔥 Error del servidor de WhatsApp');
+            
+            // Notificar error del servidor de WhatsApp
+            await notifyAdmins(
+              'WHATSAPP_API_ERROR',
+              `Error del servidor de WhatsApp API.\n\n` +
+              `Status: ${status}\n` +
+              `Destinatario afectado: ${to}\n` +
+              `Error: ${JSON.stringify(errorData)}\n\n` +
+              `Acción: Este es un problema del lado de WhatsApp.\n` +
+              `El sistema reintentará automáticamente.`,
+              {
+                severidad: 'ERROR',
+                metadata: {
+                  status,
+                  to,
+                  errorData
+                }
+              }
+            ).catch(notifyError => {
+              logger.error('Error enviando notificación:', notifyError.message);
+            });
           }
         } else if (err.request) {
           // Request enviado pero no hay respuesta

@@ -4,6 +4,7 @@ import logger from '../logger.js';
 import sql from 'mssql';
 import { getPool } from './dbService.js';
 import * as configService from './configService.js';
+import { notifyAdmins } from './notificationService.js';
 
 /**
  * Servicio de Impresión ESC/POS
@@ -18,6 +19,10 @@ import * as configService from './configService.js';
  * 
  * @module printingService
  */
+
+// Contador de errores consecutivos para notificaciones
+let consecutiveErrors = 0;
+let lastErrorTime = null;
 
 // Variables para cachear configuraciones de impresora
 let cachedPrinterConfig = {
@@ -197,6 +202,10 @@ export async function printTicket(data) {
 
     logger.info('✅ Ticket impreso exitosamente - Folio: %s', data.folio);
     
+    // Resetear contador de errores consecutivos al tener éxito
+    consecutiveErrors = 0;
+    lastErrorTime = null;
+    
     // Actualizar estado a Impreso
     if (data.pedidoID) {
       await updatePrintStatus(data.pedidoID, 'Impreso');
@@ -208,6 +217,70 @@ export async function printTicket(data) {
     // Actualizar estado a Error con mensaje
     if (data.pedidoID) {
       await updatePrintStatus(data.pedidoID, 'Error', err.message);
+    }
+    
+    // Contabilizar error consecutivo
+    const now = Date.now();
+    const threshold = parseInt(await configService.getConfig('PRINTING_ERROR_THRESHOLD')?.valor || '3');
+    
+    // Si el último error fue hace menos de 10 minutos, incrementar contador
+    if (lastErrorTime && (now - lastErrorTime) < 600000) { // 10 minutos
+      consecutiveErrors++;
+    } else {
+      // Reiniciar contador si pasó mucho tiempo
+      consecutiveErrors = 1;
+    }
+    
+    lastErrorTime = now;
+    
+    // Notificar error individual
+    await notifyAdmins(
+      'PRINTING_ERROR',
+      `Error al imprimir pedido.\n\n` +
+      `Folio: ${data.folio}\n` +
+      `Pedido ID: ${data.pedidoID || 'N/A'}\n` +
+      `Cliente: ${data.cliente}\n` +
+      `Error: ${err.message}\n\n` +
+      `Acción: Verificar estado de la impresora y reintentar manualmente.`,
+      {
+        severidad: 'ERROR',
+        metadata: {
+          pedidoID: data.pedidoID,
+          folio: data.folio,
+          error: err.message,
+          cliente: data.cliente
+        }
+      }
+    ).catch(notifyError => {
+      // No interrumpir el flujo si falla la notificación
+      logger.error('Error enviando notificación de error de impresión:', notifyError.message);
+    });
+    
+    // Si hay muchos errores consecutivos, enviar alerta crítica
+    if (consecutiveErrors >= threshold) {
+      await notifyAdmins(
+        'PRINTING_RECURRING',
+        `⚠️ ALERTA CRÍTICA: Se han detectado ${consecutiveErrors} errores de impresión consecutivos en los últimos 10 minutos.\n\n` +
+        `Último error: ${err.message}\n\n` +
+        `Acción recomendada:\n` +
+        `1. Verificar conexión física de la impresora\n` +
+        `2. Verificar conexión de red (${data.printerIP || 'N/A'})\n` +
+        `3. Reiniciar impresora si es necesario\n` +
+        `4. Revisar papel y otros consumibles`,
+        {
+          severidad: 'CRITICAL',
+          metadata: {
+            consecutiveErrors,
+            lastError: err.message,
+            printerIP: data.printerIP
+          }
+        }
+      ).catch(notifyError => {
+        logger.error('Error enviando notificación crítica:', notifyError.message);
+      });
+      
+      // Reiniciar contador después de notificar
+      consecutiveErrors = 0;
     }
     
     throw err;

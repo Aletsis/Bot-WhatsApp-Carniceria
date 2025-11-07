@@ -7,6 +7,22 @@ let poolInstance = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 5000; // 5 segundos
+let hasNotifiedCritical = false; // Para evitar spam de notificaciones
+
+/**
+ * Importa notificationService de forma dinámica para evitar dependencias circulares
+ */
+async function notifyError(message, metadata) {
+  try {
+    const { notifyAdmins } = await import('./notificationService.js');
+    await notifyAdmins('DATABASE_ERROR', message, {
+      severidad: 'CRITICAL',
+      metadata
+    });
+  } catch (error) {
+    logger.error('[DB] Error enviando notificación:', error.message);
+  }
+}
 
 /**
  * Intenta reconectar a la base de datos con backoff exponencial
@@ -14,6 +30,29 @@ const RECONNECT_DELAY_MS = 5000; // 5 segundos
 async function attemptReconnection() {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     logger.error('[DB] Máximo de intentos de reconexión alcanzado (%d)', MAX_RECONNECT_ATTEMPTS);
+    
+    // Notificar error crítico solo una vez
+    if (!hasNotifiedCritical) {
+      await notifyError(
+        `Error crítico de conexión a base de datos.\n\n` +
+        `No se pudo reconectar después de ${MAX_RECONNECT_ATTEMPTS} intentos.\n\n` +
+        `Servidor: ${process.env.DB_HOST}:${process.env.DB_PORT}\n` +
+        `Base de datos: ${process.env.DB_NAME}\n\n` +
+        `Acción recomendada:\n` +
+        `1. Verificar que SQL Server esté corriendo\n` +
+        `2. Verificar credenciales de acceso\n` +
+        `3. Verificar firewall y conectividad de red\n` +
+        `4. Reiniciar el servidor de aplicación`,
+        {
+          reconnectAttempts: MAX_RECONNECT_ATTEMPTS,
+          server: process.env.DB_HOST,
+          port: process.env.DB_PORT,
+          database: process.env.DB_NAME
+        }
+      );
+      hasNotifiedCritical = true;
+    }
+    
     return;
   }
   
@@ -28,6 +67,19 @@ async function attemptReconnection() {
       await getPool();
       logger.info('[DB] ✅ Reconexión exitosa');
       reconnectAttempts = 0; // Resetear contador al reconectar exitosamente
+      hasNotifiedCritical = false; // Permitir notificaciones futuras
+      
+      // Notificar recuperación exitosa
+      await notifyError(
+        `✅ Conexión a base de datos restaurada exitosamente.\n\n` +
+        `La aplicación se ha reconectado después de ${reconnectAttempts} intentos.\n` +
+        `El sistema está operativo nuevamente.`,
+        {
+          reconnectAttempts,
+          recovered: true
+        }
+      );
+      
     } catch (err) {
       logger.error('[DB] ❌ Reconexión fallida:', err.message);
       await attemptReconnection();
