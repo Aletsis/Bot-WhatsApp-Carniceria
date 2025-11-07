@@ -397,19 +397,577 @@ Día 2: Tarea 11 (Exportación) + Tarea 12 (Modo Oscuro) - 2.5-3.5h
 
 ---
 
-## 📈 Progreso General del Proyecto
+---
+
+## 🆕 NUEVAS TAREAS IDENTIFICADAS (Sprint 4)
+
+### 🔴 CRÍTICAS - Infraestructura y Estabilidad
+
+#### ❌ Tarea 13: Endpoint /health para Monitoreo
+**Prioridad:** 🔴 CRÍTICA  
+**Estimación:** 1 hora
+
+**Objetivo:** Healthcheck robusto para monitoreo de servicios
+
+**Subtareas:**
+- [ ] Endpoint `GET /health` público (sin autenticación)
+- [ ] Verificar estado de BD (conexión activa)
+- [ ] Verificar estado de WhatsApp API (token válido)
+- [ ] Verificar espacio en disco
+- [ ] Verificar memoria disponible
+- [ ] Tiempo de respuesta de servicios críticos
+- [ ] Formato JSON con detalles por servicio
+- [ ] HTTP 200 si todo OK, 503 si hay fallos
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-11-06T10:30:00Z",
+  "uptime": 86400,
+  "services": {
+    "database": { "status": "up", "responseTime": 45 },
+    "whatsapp": { "status": "up", "responseTime": 120 },
+    "disk": { "status": "ok", "usage": "45%" },
+    "memory": { "status": "ok", "usage": "62%" }
+  }
+}
+```
+
+**Archivos:**
+- `src/routes/health.js`
+- `src/controllers/healthController.js`
+
+---
+
+#### ❌ Tarea 14: Optimización de Base de Datos
+**Prioridad:** 🔴 CRÍTICA  
+**Estimación:** 2-3 horas
+
+**Objetivo:** Agregar índices para mejorar performance
+
+**Subtareas:**
+- [ ] Análisis de queries lentas (SQL Server Query Store)
+- [ ] Índice en `Pedidos.Folio` (búsquedas frecuentes)
+- [ ] Índice en `Pedidos.FechaPedido` (filtros de fecha)
+- [ ] Índice en `Clientes.NumeroTelefono` (joins frecuentes)
+- [ ] Índice compuesto en `Conversaciones(NumeroTelefono, Estado)`
+- [ ] Índice en `Mensajes.Contenido` (full-text search)
+- [ ] Actualizar estadísticas de BD
+- [ ] Documentar estrategia de indexación
+
+**Migración:**
+- `migrations/17_indices_optimizacion.sql`
+
+**Beneficios:**
+- ⚡ Queries 5-10x más rápidas
+- 📊 Mejor rendimiento en dashboard
+- 🔍 Búsqueda instantánea
+
+---
+
+#### ❌ Tarea 15: Rotación y Gestión de Logs
+**Prioridad:** 🔴 CRÍTICA  
+**Estimación:** 1.5 horas
+
+**Objetivo:** Prevenir que logs llenen el disco
+
+**Subtareas:**
+- [ ] Configurar `pino-pretty` con rotación
+- [ ] Logs por día: `logs/app-2025-11-06.log`
+- [ ] Retención: 30 días
+- [ ] Compresión de logs antiguos (.gz)
+- [ ] Limpieza automática de logs >30 días
+- [ ] Separar logs por nivel (info, error, warn)
+- [ ] Configuración en .env: `LOG_LEVEL`, `LOG_RETENTION_DAYS`
+
+**Archivos:**
+- `src/logger.js`
+- `package.json` (agregar pino-rotating-file-stream)
+
+---
+
+#### ❌ Tarea 16: Backup Automático de Base de Datos
+**Prioridad:** 🔴 CRÍTICA  
+**Estimación:** 2 horas
+
+**Objetivo:** Proteger datos con backups automáticos
+
+**Subtareas:**
+- [ ] Script de backup con SQL Server BACKUP DATABASE
+- [ ] Backup completo diario (3 AM)
+- [ ] Backup diferencial cada 6 horas
+- [ ] Retención: 7 días completos, 30 días diferenciales
+- [ ] Verificación de integridad de backup
+- [ ] Notificación si backup falla
+- [ ] Compresión de backups
+- [ ] Configurar cron job o Windows Task Scheduler
+
+**Archivos:**
+- `scripts/backup-database.js`
+- `scripts/verify-backup.js`
+
+---
+
+### 🟡 IMPORTANTES - Funcionalidades y Mejoras
+
+#### ❌ Tarea 17: Sistema de Notificaciones Toast en Frontend
+**Prioridad:** 🟡 ALTA  
+**Estimación:** 1.5 horas
+
+**Objetivo:** Feedback visual inmediato de acciones
+
+**Subtareas:**
+- [ ] Instalar `react-hot-toast` o `sonner`
+- [ ] Configurar Toaster en App.jsx
+- [ ] Tipos: success, error, warning, info
+- [ ] Posición: top-right
+- [ ] Duración: 3-5 segundos
+- [ ] Implementar en todas las páginas:
+  - ✅ Pedido actualizado
+  - ✅ Cliente guardado
+  - ✅ Usuario creado
+  - ❌ Error de red
+  - ⚠️ Advertencias
+
+**Archivos:**
+- `client/src/App.jsx`
+- Todas las páginas (reemplazar alerts)
+
+---
+
+#### ❌ Tarea 18: Notificaciones en Tiempo Real con WebSockets
+**Prioridad:** 🟡 ALTA  
+**Estimación:** 3-4 horas
+
+**Objetivo:** Actualización instantánea de nuevos pedidos
+
+**Subtareas:**
+- [ ] Instalar `socket.io` y `socket.io-client`
+- [ ] Configurar servidor Socket.IO en Express
+- [ ] Eventos:
+  - `new_order` - Nuevo pedido recibido
+  - `order_updated` - Estado actualizado
+  - `message_received` - Nuevo mensaje en chat
+- [ ] Cliente React escucha eventos
+- [ ] Actualizar UI automáticamente sin refresh
+- [ ] Badge de notificación en navbar
+- [ ] Sonido opcional de notificación
+
+**Archivos:**
+- `app.js` (Socket.IO server)
+- `src/services/socketService.js`
+- `client/src/hooks/useSocket.js`
+- `client/src/contexts/SocketContext.jsx`
+
+---
+
+#### ❌ Tarea 19: Confirmación de Lectura de Mensajes
+**Prioridad:** 🟡 MEDIA  
+**Estimación:** 2 horas
+
+**Objetivo:** Marcar mensajes como leídos en WhatsApp
+
+**Subtareas:**
+- [ ] Endpoint de WhatsApp API para marcar como leído
+- [ ] Marcar automáticamente al abrir chat en dashboard
+- [ ] Actualizar estado `Leido` en BD
+- [ ] Sincronizar con campo `read_status` de WhatsApp
+- [ ] Check azul (✓✓) cuando cliente lee mensaje
+
+**Archivos:**
+- `src/services/whatsappService.js`
+- `src/controllers/dashboardController.js`
+- `client/src/pages/ChatsPage.jsx`
+
+---
+
+#### ❌ Tarea 20: Manejo de Media (Imágenes/Ubicaciones)
+**Prioridad:** 🟡 MEDIA  
+**Estimación:** 4-5 horas
+
+**Objetivo:** Soportar mensajes multimedia
+
+**Subtareas:**
+- [ ] Recibir imágenes en webhook
+- [ ] Descargar y guardar imágenes localmente
+- [ ] Tabla `MediaMensajes` (MensajeID, TipoMedia, URL, RutaLocal)
+- [ ] Mostrar imágenes en historial de chats
+- [ ] Recibir ubicaciones (lat, long)
+- [ ] Mostrar mapa en dashboard (Google Maps/Mapbox)
+- [ ] Enviar imágenes desde dashboard (opcional)
+
+**Archivos:**
+- `migrations/18_media_mensajes.sql`
+- `src/services/mediaService.js`
+- `src/controllers/webhookController.js`
+- `client/src/pages/ChatsPage.jsx`
+
+---
+
+### 🟢 CALIDAD DE CÓDIGO - Testing y Documentación
+
+#### ❌ Tarea 21: Tests Unitarios Completos
+**Prioridad:** 🟢 ALTA (Calidad)  
+**Estimación:** 5-6 horas
+
+**Objetivo:** Cobertura de código >80%
+
+**Subtareas:**
+- [ ] Configurar Jest + Supertest
+- [ ] Tests para `sessionService.js`
+- [ ] Tests para `whatsappService.js`
+- [ ] Tests para `messageService.js`
+- [ ] Tests para endpoints de API
+- [ ] Tests para componentes React (React Testing Library)
+- [ ] Mock de BD y API de WhatsApp
+- [ ] Script `npm test` con coverage report
+
+**Archivos:**
+- `jest.config.js`
+- `tests/unit/` (directorio nuevo)
+- `tests/integration/` (directorio nuevo)
+- `package.json` (scripts de test)
+
+---
+
+#### ❌ Tarea 22: JSDoc Completo
+**Prioridad:** 🟢 MEDIA (Calidad)  
+**Estimación:** 3-4 horas
+
+**Objetivo:** Documentación inline de todo el código
+
+**Subtareas:**
+- [ ] JSDoc en todos los servicios
+- [ ] JSDoc en todos los controllers
+- [ ] JSDoc en funciones helpers
+- [ ] Tipos de parámetros y returns
+- [ ] Ejemplos de uso
+- [ ] Generar HTML docs con `jsdoc`
+- [ ] Configurar VSCode para IntelliSense
+
+**Archivos:**
+- Todos los `.js` en `src/`
+- `jsdoc.config.json`
+
+---
+
+#### ❌ Tarea 23: Mejorar Configuración de ESLint
+**Prioridad:** 🟢 MEDIA (Calidad)  
+**Estimación:** 1 hora
+
+**Objetivo:** Estándar de código consistente
+
+**Subtareas:**
+- [ ] Configurar ESLint con Airbnb style guide
+- [ ] Reglas para async/await
+- [ ] Reglas para promesas
+- [ ] Detectar variables no usadas
+- [ ] Detectar imports no usados
+- [ ] Formateo automático con Prettier
+- [ ] Pre-commit hook con Husky
+
+**Archivos:**
+- `eslint.config.js`
+- `.prettierrc`
+- `package.json` (husky, lint-staged)
+
+---
+
+### 🔧 REFACTORIZACIÓN Y OPTIMIZACIÓN
+
+#### ❌ Tarea 24: Externalizar Mensajes a Configuración
+**Prioridad:** � MEDIA  
+**Estimación:** 2 horas
+
+**Objetivo:** Mensajes centralizados y editables
+
+**Subtareas:**
+- [ ] Archivo `config/messages.json` con todos los textos
+- [ ] Refactorizar `stateHandlers.js` para usar config
+- [ ] Refactorizar `buttonHandlers.js` para usar config
+- [ ] Función helper `getMessage(key, params)`
+- [ ] Soporte para plantillas con variables: `{nombre}`, `{folio}`
+- [ ] Mensajes en español e inglés (i18n futuro)
+
+**Archivos:**
+- `config/messages.json`
+- `src/utils/messageHelper.js`
+- `src/handlers/stateHandlers.js`
+- `src/handlers/buttonHandlers.js`
+
+---
+
+#### ❌ Tarea 25: Refactorizar Mensajes de Bienvenida Duplicados
+**Prioridad:** 🟢 BAJA  
+**Estimación:** 1 hora
+
+**Objetivo:** DRY - Eliminar duplicación de código
+
+**Subtareas:**
+- [ ] Identificar mensajes duplicados
+- [ ] Crear función `sendWelcomeMessage(telefono, nombre)`
+- [ ] Consolidar lógica de bienvenida
+- [ ] Usar en todos los handlers
+
+**Archivos:**
+- `src/handlers/stateHandlers.js`
+- `src/utils/messageHelper.js`
+
+---
+
+#### ❌ Tarea 26: Soft Delete para Clientes
+**Prioridad:** 🟢 BAJA  
+**Estimación:** 1.5 horas
+
+**Objetivo:** No eliminar datos, solo marcar como inactivos
+
+**Subtareas:**
+- [ ] Agregar campo `EliminadoEn DATETIME2` a tabla Clientes
+- [ ] Agregar campo `EliminadoPor INT` (FK a Usuarios)
+- [ ] Modificar endpoint DELETE a soft delete
+- [ ] Filtrar clientes eliminados en queries
+- [ ] UI para "Papelera" de clientes eliminados
+- [ ] Botón "Restaurar" para clientes eliminados
+
+**Archivos:**
+- `migrations/19_soft_delete_clientes.sql`
+- `src/controllers/dashboardController.js`
+- `client/src/pages/ClientesPage.jsx`
+
+---
+
+### 🚀 DEVOPS Y CI/CD
+
+#### ❌ Tarea 27: CI/CD con GitHub Actions
+**Prioridad:** 🟡 ALTA  
+**Estimación:** 2-3 horas
+
+**Objetivo:** Automatizar testing y deployment
+
+**Subtareas:**
+- [ ] Workflow de CI:
+  - Lint con ESLint
+  - Tests con Jest
+  - Build de frontend
+  - Verificar migraciones
+- [ ] Workflow de CD:
+  - Deploy automático a servidor
+  - Backup antes de deploy
+  - Ejecutar migraciones
+  - Reiniciar servicios
+- [ ] Branch protection rules
+- [ ] Status badges en README
+
+**Archivos:**
+- `.github/workflows/ci.yml`
+- `.github/workflows/cd.yml`
+
+---
+
+#### ❌ Tarea 28: Sistema de Métricas y Monitoring
+**Prioridad:** 🟡 MEDIA  
+**Estimación:** 3-4 horas
+
+**Objetivo:** Monitorear performance y uso
+
+**Subtareas:**
+- [ ] Instalar Prometheus client
+- [ ] Métricas:
+  - Requests por endpoint
+  - Tiempo de respuesta
+  - Errores por tipo
+  - Mensajes procesados
+  - Pedidos por día/hora
+  - Uso de memoria/CPU
+- [ ] Endpoint `/metrics` para Prometheus
+- [ ] Dashboard con Grafana (opcional)
+- [ ] Alertas configurables
+
+**Archivos:**
+- `src/middleware/metrics.js`
+- `src/routes/metrics.js`
+- `prometheus.yml` (config)
+
+---
+
+## 📊 Resumen Actualizado de Estimaciones
+
+### Sprint 3 (Original)
+| Prioridad | Tareas | Tiempo Estimado |
+|-----------|--------|-----------------|
+| 🔥 ALTA | 1 | 3-4 horas |
+| 🟡 MEDIA | 5 | 10.5-13 horas |
+| 🟢 BAJA | 2 | 2.5-3.5 horas |
+| **Subtotal Sprint 3** | **8** | **16-20.5 horas** |
+
+### Sprint 4 (Nuevo)
+| Prioridad | Tareas | Tiempo Estimado |
+|-----------|--------|-----------------|
+| 🔴 CRÍTICA | 4 | 6.5-8 horas |
+| 🟡 ALTA | 4 | 10-14 horas |
+| 🟢 MEDIA-ALTA | 4 | 11-14 horas |
+| 🟢 BAJA | 4 | 5.5-6.5 horas |
+| **Subtotal Sprint 4** | **16** | **33-42.5 horas** |
+
+### TOTAL GENERAL
+| Sprint | Tareas Pendientes | Tiempo Estimado |
+|--------|-------------------|-----------------|
+| Sprint 3 | 8 | 16-20.5 horas |
+| Sprint 4 | 16 | 33-42.5 horas |
+| **TOTAL** | **24** | **49-63 horas** |
+
+---
+
+## 🎯 Roadmap Actualizado con Prioridades
+
+### 🔴 FASE CRÍTICA (Sprint 4 - Infraestructura)
+**Estimación:** 6.5-8 horas
+
+**Orden sugerido:**
+1. **Tarea 13:** Endpoint /health (1h)
+2. **Tarea 14:** Optimización BD con índices (2-3h)
+3. **Tarea 15:** Rotación de logs (1.5h)
+4. **Tarea 16:** Backup automático (2h)
+
+**Beneficio:** Sistema robusto y monitoreable en producción
+
+---
+
+### 🔥 FASE 1 (Sprint 3 - Configuración)
+**Estimación:** 4.5-5.5 horas
+
+1. **Tarea 5:** Página de Configuración (3-4h)
+2. **Tarea 6:** Rol Supervisor (1.5h)
+
+---
+
+### 🟡 FASE 2 (Sprint 4 - Tiempo Real)
+**Estimación:** 5-6.5 horas
+
+1. **Tarea 17:** Sistema de toast notifications (1.5h)
+2. **Tarea 18:** WebSockets para tiempo real (3-4h)
+3. **Tarea 27:** CI/CD con GitHub Actions (2-3h) ← en paralelo
+
+---
+
+### 🟡 FASE 3 (Sprint 3 - Monitoreo)
+**Estimación:** 4-5 horas
+
+1. **Tarea 7:** Notificaciones a Admin (2-3h)
+2. **Tarea 8:** Alertas de Impresión (1.5-2h)
+
+---
+
+### 🟡 FASE 4 (Sprint 3 - Analytics)
+**Estimación:** 4-5 horas
+
+1. **Tarea 9:** Gráficas de Estadísticas (2-3h)
+2. **Tarea 10:** Búsqueda Avanzada (1.5-2h)
+
+---
+
+### 🟢 FASE 5 (Sprint 4 - Mensajería Avanzada)
+**Estimación:** 6-7 horas
+
+1. **Tarea 19:** Confirmación de lectura (2h)
+2. **Tarea 20:** Manejo de media (4-5h)
+
+---
+
+### 🟢 FASE 6 (Calidad de Código)
+**Estimación:** 9-11 horas
+
+1. **Tarea 21:** Tests unitarios (5-6h)
+2. **Tarea 22:** JSDoc completo (3-4h)
+3. **Tarea 23:** ESLint mejorado (1h)
+
+---
+
+### 🟢 FASE 7 (Refactorización)
+**Estimación:** 4.5-5.5 horas
+
+1. **Tarea 24:** Externalizar mensajes (2h)
+2. **Tarea 25:** Refactorizar duplicados (1h)
+3. **Tarea 26:** Soft delete clientes (1.5h)
+
+---
+
+### 🟢 FASE 8 (Extras y Monitoring)
+**Estimación:** 6-8 horas
+
+1. **Tarea 28:** Sistema de métricas (3-4h)
+2. **Tarea 11:** Exportación reportes (1-1.5h)
+3. **Tarea 12:** Modo oscuro (1.5-2h)
+
+---
+
+## 📈 Progreso General Actualizado
 
 ```
 Sprint 1: ████████████████████ 100% (4/4)
 Sprint 2: ████████████████████ 100% (4/4)
 Sprint 3: ████████░░░░░░░░░░░░  33% (4/12)
+Sprint 4: ░░░░░░░░░░░░░░░░░░░░   0% (0/16)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TOTAL:    ██████████████░░░░░░  60% (12/20)
+TOTAL:    ███████░░░░░░░░░░░░░  33% (12/36)
 ```
 
-**Estimación para 100%:** 16-20.5 horas adicionales
+**Estimación para 100%:** 49-63 horas adicionales
+
+---
+
+## 🎯 Recomendación de Implementación
+
+### Semana 1-2: Infraestructura Crítica
+```
+Prioridad MÁXIMA - No se puede saltar
+1. Endpoint /health
+2. Índices en BD  
+3. Rotación de logs
+4. Backup automático
+```
+
+### Semana 3: Configuración y Roles
+```
+5. Página de configuración
+6. Rol supervisor
+7. Toast notifications
+```
+
+### Semana 4: Tiempo Real y Monitoreo
+```
+8. WebSockets
+9. Notificaciones admin
+10. Alertas impresión
+```
+
+### Semana 5-6: Analytics y UX
+```
+11. Gráficas estadísticas
+12. Búsqueda avanzada
+13. Confirmación lectura
+14. CI/CD setup
+```
+
+### Semana 7-8: Calidad
+```
+15. Tests unitarios
+16. JSDoc
+17. ESLint
+18. Refactorización
+```
+
+### Semana 9-10: Extras
+```
+19. Manejo de media
+20. Sistema métricas
+21. Exportación
+22. Modo oscuro
+```
 
 ---
 
 **Última actualización:** 06/11/2025  
-**Próxima revisión:** Después de completar Fase 1
+**Próxima revisión:** Después de completar Fase Crítica  
+**Total de tareas:** 36 (12 completadas, 24 pendientes)
