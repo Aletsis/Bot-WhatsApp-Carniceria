@@ -7,6 +7,89 @@ y este proyecto adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [2.1.0] - 2024-11-06
+
+### 🎉 Added - Sistema Completo de Historial de Chats
+
+- **Persistencia total de mensajes** con tabla `Mensajes` en BD
+- **Visualización estilo WhatsApp Web** con burbujas diferenciadas
+- **Búsqueda avanzada multi-campo** (nombre, teléfono, contenido)
+- **Modo dual de búsqueda** con toggle entre Contactos y Mensajes
+- **Envío de mensajes directo a clientes** desde dashboard
+- **Visualización de botones interactivos** enviados al cliente
+- **Indicador de respuestas de botón** con icono 🔘
+- **Auto-actualización** de mensajes después de enviar
+- **Auto-scroll** al último mensaje
+- **Atajo de teclado** Ctrl+Enter para envío rápido
+- **Badges de mensajes no leídos** en lista de conversaciones
+- **Check marks** (✓✓) en mensajes enviados
+- **Estados de carga** en todas las operaciones
+- **Metadata completa** de WhatsApp en JSON
+
+### 🔧 Backend Changes
+
+- **Nuevos endpoints API** (8 en total):
+  - `GET /api/dashboard/chats` - Lista conversaciones
+  - `GET /api/dashboard/chats/:telefono` - Historial completo
+  - `GET /api/dashboard/chats/search` - Búsqueda en mensajes
+  - `GET /api/dashboard/chats/search-conversations` - Búsqueda en contactos
+  - `POST /api/dashboard/chats/:telefono/send` - Enviar mensaje
+  - `POST /api/dashboard/chats/:telefono/mark-read` - Marcar leídos
+  - `GET /api/dashboard/chats/stats` - Estadísticas
+- **Nuevo servicio** `messageService.js` con 9 funciones
+- **Función** `sendMessageToClient()` en dashboardController
+- **Integración** de guardado automático en webhookController
+- **Queries SQL optimizadas** con CTE para búsquedas
+- **Índices optimizados** en tabla Mensajes
+
+### 🎨 Frontend Changes
+
+- **Nueva página** `ChatsPage.jsx` (465 líneas)
+- **Estilos completos** `ChatsPage.css` (584 líneas)
+- **Componente de búsqueda** con toggle de modos
+- **Área de composición** de mensajes con textarea
+- **Función** `renderMessageContent()` para botones interactivos
+- **Función** `sendMessage()` con validación y estados
+- **useEffect** para auto-scroll y reset de estados
+- **Fix de z-index** para interactividad de input
+- **pointer-events: none** en pseudo-elementos
+
+### 🧪 Testing
+
+- **Script** `test-messages.js` - Prueba guardado de mensajes
+- **Script** `test-button-messages.js` - Prueba botones interactivos
+- **Script** `test-search.js` - Prueba búsqueda multi-campo
+- **Script** `test-send-message.js` - Prueba envío desde dashboard
+
+### 📚 Documentation
+
+- **Nuevo documento** `docs/CHAT_HISTORY.md` (476 líneas)
+  - Arquitectura completa del sistema
+  - Documentación de base de datos
+  - Backend y Frontend detallados
+  - 6 funcionalidades principales
+  - Guía de uso completa
+  - Mejoras futuras
+- **Actualizado** `docs/API.md` con 6 nuevos endpoints
+- **Actualizado** `docs/SPRINT3_PLAN.md` con Tarea 4 completada
+- **Actualizado** `README.md` con funcionalidades de chats
+
+### 🐛 Fixed
+
+- **Corregido** import de axios (default export)
+- **Corregido** z-index del input de mensaje
+- **Corregido** pointer-events en background pattern
+- **Agregado** reset de estados al cambiar conversación
+
+### ⏱️ Performance
+
+- Índices en BD: `IX_Mensajes_Telefono_Fecha`, `IX_Mensajes_Fecha`, `IX_Mensajes_Leido`
+- Paginación con `limit` y `offset`
+- Queries optimizadas con CTE
+- Lazy loading de mensajes antiguos
+
+---
+
 ## [2.0.0] - 2024-11-06
 
 ### 🎉 Added - Dashboard React Completo
