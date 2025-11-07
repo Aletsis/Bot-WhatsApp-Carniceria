@@ -10,18 +10,19 @@ import { getPool } from './dbService.js';
  * 2. Crear la base de datos si no existe
  * 3. Crear todas las tablas necesarias:
  *    - Clientes
- *    - Pedidos (con Version para concurrencia)
+ *    - Pedidos (con Version, NotificacionImpresionEnviada)
  *    - Conversaciones (con TimeoutExpiraEn y Version)
  *    - TelefonosAtencion
- *    - Usuarios (para dashboard)
+ *    - Usuarios (con NumeroWhatsApp y rol supervisor)
  *    - LogAccesos (auditoría de accesos)
  *    - Configuraciones (configuraciones del sistema)
  *    - Mensajes (historial de chats)
- * 4. Crear índices para optimizar rendimiento (16 índices)
+ *    - NotificacionesLog (sistema de notificaciones de errores)
+ * 4. Crear índices para optimizar rendimiento (20+ índices)
  * 5. Insertar datos iniciales:
  *    - Teléfonos de atención
  *    - Usuario admin (username: admin, password: admin123)
- *    - Configuraciones por defecto del sistema
+ *    - Configuraciones por defecto (incluye sistema de notificaciones)
  * 
  * La inicialización es automática al arrancar la app.
  * También puede ejecutarse manualmente con: npm run init-db
@@ -129,11 +130,12 @@ async function createDatabase(dbName) {
         EstadoImpresion NVARCHAR(50) NOT NULL DEFAULT 'Pendiente',
         FechaImpresion DATETIME2 NULL,
         ErrorImpresion NVARCHAR(500) NULL,
+        NotificacionImpresionEnviada DATETIMEOFFSET NULL,
         Version INT NOT NULL DEFAULT 0,
         CONSTRAINT CK_Pedidos_EstadoImpresion CHECK (EstadoImpresion IN ('Pendiente', 'Impreso', 'Error', 'NoRequerida', 'Reimprimiendo'))
       )
     `);
-    logger.info('[DB Init] ✅ Tabla Pedidos creada');
+    logger.info('[DB Init] ✅ Tabla Pedidos creada (con NotificacionImpresionEnviada)');
     
     // Crear tabla Conversaciones
     await pool.request().query(`
@@ -168,14 +170,15 @@ async function createDatabase(dbName) {
         Rol NVARCHAR(20) NOT NULL DEFAULT 'viewer',
         Nombre NVARCHAR(100) NULL,
         Email NVARCHAR(100) NULL,
+        NumeroWhatsApp NVARCHAR(20) NULL,
         Activo BIT NOT NULL DEFAULT 1,
         FechaCreacion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
         UltimoAcceso DATETIME2 NULL,
         CreadoPor NVARCHAR(50) NULL,
-        CONSTRAINT CK_Usuarios_Rol CHECK (Rol IN ('admin', 'editor', 'viewer'))
+        CONSTRAINT CK_Usuarios_Rol CHECK (Rol IN ('admin', 'supervisor', 'editor', 'viewer'))
       )
     `);
-    logger.info('[DB Init] ✅ Tabla Usuarios creada');
+    logger.info('[DB Init] ✅ Tabla Usuarios creada (con NumeroWhatsApp y rol supervisor)');
     
     // Crear índices para Usuarios
     await pool.request().query(`
@@ -247,9 +250,15 @@ async function createDatabase(dbName) {
       ('SESSION_TTL_MINUTES', '1440', 'Tiempo de vida de sesión HTTP en minutos (24h default)', 'number', 'SYSTEM', 1),
       
       -- === NOTIFICATIONS ===
-      ('NOTIFICATIONS_ENABLED', 'true', 'Habilitar notificaciones automáticas a clientes', 'boolean', 'NOTIFICATIONS', 1)
+      ('NOTIFICATIONS_ENABLED', 'true', 'Habilitar notificaciones automáticas a clientes', 'boolean', 'NOTIFICATIONS', 1),
+      ('ERROR_NOTIFICATIONS_ENABLED', 'true', 'Habilitar notificaciones de errores a administradores', 'boolean', 'NOTIFICATIONS', 1),
+      ('NOTIFICATION_THROTTLE_MINUTES', '15', 'Minutos entre notificaciones del mismo tipo de error', 'number', 'NOTIFICATIONS', 1),
+      ('PRINTING_ERROR_THRESHOLD', '3', 'Cantidad de errores consecutivos antes de alerta crítica', 'number', 'NOTIFICATIONS', 1),
+      ('PRINT_MONITOR_ENABLED', 'true', 'Habilitar monitoreo automático de pedidos no impresos', 'boolean', 'NOTIFICATIONS', 1),
+      ('PRINT_MONITOR_INTERVAL', '5', 'Intervalo en minutos para verificar pedidos no impresos', 'number', 'NOTIFICATIONS', 1),
+      ('PRINT_TIMEOUT_MINUTES', '15', 'Minutos de espera antes de notificar pedido no impreso', 'number', 'NOTIFICATIONS', 1)
     `);
-    logger.info('[DB Init] ✅ Configuraciones por defecto insertadas');
+    logger.info('[DB Init] ✅ Configuraciones por defecto insertadas (incluye sistema de notificaciones)');
     
     // Crear tabla Mensajes (historial de chats)
     await pool.request().query(`
@@ -273,6 +282,32 @@ async function createDatabase(dbName) {
     `);
     logger.info('[DB Init] ✅ Índices de Mensajes creados');
     
+    // Crear tabla NotificacionesLog (sistema de notificaciones de errores)
+    await pool.request().query(`
+      CREATE TABLE NotificacionesLog (
+        NotificacionID BIGINT IDENTITY(1,1) PRIMARY KEY,
+        TipoError NVARCHAR(50) NOT NULL,
+        Severidad NVARCHAR(20) NOT NULL CHECK (Severidad IN ('INFO', 'WARNING', 'ERROR', 'CRITICAL')),
+        Mensaje NVARCHAR(MAX) NOT NULL,
+        Destinatarios NVARCHAR(MAX) NOT NULL,
+        Estado NVARCHAR(20) NOT NULL DEFAULT 'PENDIENTE' CHECK (Estado IN ('PENDIENTE', 'ENVIADO', 'ERROR', 'THROTTLED')),
+        WhatsAppMessageID NVARCHAR(100) NULL,
+        Metadata NVARCHAR(MAX) NULL,
+        ErrorMensaje NVARCHAR(MAX) NULL,
+        CreadoEn DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIME(),
+        EnviadoEn DATETIMEOFFSET NULL
+      )
+    `);
+    logger.info('[DB Init] ✅ Tabla NotificacionesLog creada');
+    
+    // Crear índices para NotificacionesLog
+    await pool.request().query(`
+      CREATE INDEX IX_NotificacionesLog_TipoError_CreadoEn ON NotificacionesLog(TipoError, CreadoEn DESC);
+      CREATE INDEX IX_NotificacionesLog_Estado ON NotificacionesLog(Estado);
+      CREATE INDEX IX_NotificacionesLog_Severidad ON NotificacionesLog(Severidad);
+    `);
+    logger.info('[DB Init] ✅ Índices de NotificacionesLog creados');
+    
     // Crear índices adicionales para mejorar rendimiento
     await pool.request().query(`
       CREATE INDEX IX_Pedidos_ClienteID ON Pedidos(ClienteID);
@@ -283,6 +318,15 @@ async function createDatabase(dbName) {
       CREATE INDEX IX_Conversaciones_NumeroTelefono_Version ON Conversaciones(NumeroTelefono, Version);
     `);
     logger.info('[DB Init] ✅ Índices adicionales creados');
+    
+    // Crear índice filtrado para pedidos no impresos (monitoreo de impresión)
+    await pool.request().query(`
+      CREATE INDEX IX_Pedidos_EstadoImpresion_Fecha
+      ON Pedidos(EstadoImpresion, Fecha)
+      INCLUDE (PedidoID, Folio, NotificacionImpresionEnviada)
+      WHERE EstadoImpresion IN ('Pendiente', 'Error');
+    `);
+    logger.info('[DB Init] ✅ Índice de monitoreo de impresión creado');
     
     // Crear índice filtrado para timeouts activos
     await pool.request().query(`
@@ -346,11 +390,12 @@ async function createMissingTables(dbName, missingTables) {
               Rol NVARCHAR(20) NOT NULL DEFAULT 'viewer',
               Nombre NVARCHAR(100) NULL,
               Email NVARCHAR(100) NULL,
+              NumeroWhatsApp NVARCHAR(20) NULL,
               Activo BIT NOT NULL DEFAULT 1,
               FechaCreacion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
               UltimoAcceso DATETIME2 NULL,
               CreadoPor NVARCHAR(50) NULL,
-              CONSTRAINT CK_Usuarios_Rol CHECK (Rol IN ('admin', 'editor', 'viewer'))
+              CONSTRAINT CK_Usuarios_Rol CHECK (Rol IN ('admin', 'supervisor', 'editor', 'viewer'))
             )
           `);
           await pool.request().query(`
@@ -399,6 +444,30 @@ async function createMissingTables(dbName, missingTables) {
           `);
           logger.info('[DB Init] ✅ Tabla LogAccesos creada');
           break;
+        
+        case 'NotificacionesLog':
+          await pool.request().query(`
+            CREATE TABLE NotificacionesLog (
+              NotificacionID BIGINT IDENTITY(1,1) PRIMARY KEY,
+              TipoError NVARCHAR(50) NOT NULL,
+              Severidad NVARCHAR(20) NOT NULL CHECK (Severidad IN ('INFO', 'WARNING', 'ERROR', 'CRITICAL')),
+              Mensaje NVARCHAR(MAX) NOT NULL,
+              Destinatarios NVARCHAR(MAX) NOT NULL,
+              Estado NVARCHAR(20) NOT NULL DEFAULT 'PENDIENTE' CHECK (Estado IN ('PENDIENTE', 'ENVIADO', 'ERROR', 'THROTTLED')),
+              WhatsAppMessageID NVARCHAR(100) NULL,
+              Metadata NVARCHAR(MAX) NULL,
+              ErrorMensaje NVARCHAR(MAX) NULL,
+              CreadoEn DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIME(),
+              EnviadoEn DATETIMEOFFSET NULL
+            )
+          `);
+          await pool.request().query(`
+            CREATE INDEX IX_NotificacionesLog_TipoError_CreadoEn ON NotificacionesLog(TipoError, CreadoEn DESC);
+            CREATE INDEX IX_NotificacionesLog_Estado ON NotificacionesLog(Estado);
+            CREATE INDEX IX_NotificacionesLog_Severidad ON NotificacionesLog(Severidad);
+          `);
+          logger.info('[DB Init] ✅ Tabla NotificacionesLog creada');
+          break;
           
         default:
           logger.warn('[DB Init] ⚠️  No hay script de creación para tabla: %s', tableName);
@@ -425,10 +494,10 @@ async function checkTablesExist(dbName) {
     const result = await pool.request().query(`
       SELECT COUNT(*) as TableCount 
       FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes')
+      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes', 'NotificacionesLog')
     `);
     
-    const expectedTables = 8; // Ahora esperamos 8 tablas (incluyendo Configuraciones y Mensajes)
+    const expectedTables = 9; // Ahora esperamos 9 tablas (incluyendo NotificacionesLog)
     const foundTables = result.recordset[0].TableCount;
     
     if (foundTables < expectedTables) {
@@ -438,11 +507,11 @@ async function checkTablesExist(dbName) {
       const tablesCheck = await pool.request().query(`
         SELECT TABLE_NAME 
         FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes')
+        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes', 'NotificacionesLog')
       `);
       
       const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
-      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes'];
+      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes', 'NotificacionesLog'];
       const missingTables = allTables.filter(t => !existingTables.includes(t));
       
       if (missingTables.length > 0) {
@@ -508,11 +577,11 @@ export async function initializeDatabase() {
         const tablesCheck = await pool.request().query(`
           SELECT TABLE_NAME 
           FROM INFORMATION_SCHEMA.TABLES 
-          WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes')
+          WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes', 'NotificacionesLog')
         `);
         
         const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
-        const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes'];
+        const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes', 'NotificacionesLog'];
         const missingTables = allTables.filter(t => !existingTables.includes(t));
         
         if (missingTables.length > 0) {
