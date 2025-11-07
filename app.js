@@ -14,6 +14,7 @@ import { getPool, getPoolInstance } from './src/services/dbService.js';
 import { initializeDatabase, checkSqlServerConnection } from './src/services/dbInitService.js';
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
 import { restoreActiveTimeouts, startCleanupJob } from './src/services/sessionTimeoutService.js';
+import { startMonitor as startPrintMonitor } from './src/services/printMonitorService.js';
 import { captureRawBody, validateWebhookSecurityConfig } from './src/middleware/webhookVerification.js';
 import logger, { cleanOldLogs } from './src/logger.js';
 import backupService from './src/services/backupService.js';
@@ -174,6 +175,16 @@ async function initApp() {
     
     // Iniciar job de limpieza periódica de sesiones abandonadas
     startCleanupJob();
+    
+    // Iniciar monitor de pedidos no impresos
+    logger.info('🖨️  Iniciando monitor de pedidos no impresos...');
+    try {
+      await startPrintMonitor();
+      logger.info('✅ Monitor de pedidos no impresos iniciado correctamente');
+    } catch (err) {
+      logger.error('❌ Error iniciando monitor de pedidos no impresos:', err);
+      logger.error('⚠️  La aplicación continuará sin el monitor de impresión');
+    }
     
     // Iniciar job de limpieza de logs antiguos (cada 24 horas)
     if (isProduction) {

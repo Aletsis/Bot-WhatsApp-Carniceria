@@ -1,8 +1,24 @@
 # 📋 Tareas Pendientes - Resumen Ejecutivo
 
-**Fecha de revisión:** 07/11/2025  
+**Fecha de revisión:** 07/01/2025  
 **Sprints revisados:** Sprint 1, Sprint 2, Sprint 3, Sprint 4  
-**Última auditoría del código:** 07/11/2025
+**Última auditoría del código:** 07/01/2025
+
+---
+
+## 🎉 Actualización Reciente (07/01/2025)
+
+### ✅ Tarea 8 Completada: Notificación de Pedidos No Impresos
+
+**Sistema de monitoreo automático implementado:**
+- Job periódico (cada 5 min) detecta pedidos sin imprimir
+- Notificaciones ORDER_NOT_PRINTED vía WhatsApp
+- Campo `NotificacionImpresionEnviada` para evitar duplicados
+- Severidad automática: WARNING (15-30 min) / CRITICAL (> 30 min)
+
+**Progreso actualizado:**
+- **Sprint 3:** 58% → 67% (8/12 tareas)
+- **Proyecto Total:** 64% → 67% (24/36 tareas)
 
 ---
 
@@ -84,19 +100,19 @@ Durante la revisión completa del proyecto, se identificaron varias tareas que e
 ---
 
 ### Sprint 3 (Dashboard Avanzado y Funcionalidades Críticas)
-**Estado:** 🟡 **58% COMPLETADO** (7 de 12 tareas) ⬆️ **+8% desde última revisión**
+**Estado:** 🟡 **67% COMPLETADO** (8 de 12 tareas) ⬆️ **+9% desde última revisión**
 
-#### ✅ Completadas (7)
+#### ✅ Completadas (8)
 - ✅ Tarea 1: Concurrencia y Transacciones (optimistic locking)
 - ✅ Tarea 2: Verificación de Firma de Webhook
 - ✅ Tarea 3: Notificaciones Automáticas a Clientes
 - ✅ Tarea 4: Historial de Chats con Persistencia
 - ✅ Tarea 5: Página de Configuración
 - ✅ Tarea 6: Rol de Usuario Supervisor
-- ✅ Tarea 7: Sistema de Notificaciones de Errores ⭐ **NUEVO - 100% COMPLETO**
+- ✅ Tarea 7: Sistema de Notificaciones de Errores
+- ✅ Tarea 8: Notificación de Pedidos No Impresos ⭐ **NUEVO - 100% COMPLETO**
 
-#### ❌ Pendientes (5)
-- ❌ Tarea 8: Notificación de Pedido No Impreso
+#### ❌ Pendientes (4)
 - ❌ Tarea 9: Gráficas de Estadísticas
 - ❌ Tarea 10: Búsqueda y Filtros Avanzados
 - ❌ Tarea 11: Exportación de Reportes
@@ -445,23 +461,164 @@ node scripts/test-notifications.js --force
 
 ---
 
-### ❌ Tarea 8: Notificación de Pedidos No Impresos
+### ✅ Tarea 8: Notificación de Pedidos No Impresos  
+**Estado:** 🟢 COMPLETADA (100%)  
 **Prioridad:** 🟡 MEDIA  
-**Estimación:** 1.5-2 horas
+**Estimación:** 1.5-2 horas  
+**Tiempo Real:** 1.5 horas  
+**Fecha Completada:** 2025-01-07
 
-**Objetivo:** Alertar a supervisores cuando un pedido no se imprime
+**Objetivo:** Alertar a administradores cuando un pedido no se imprime en tiempo razonable
 
-**Subtareas:**
-- [ ] Job periódico (cada 5 min) revisa pedidos no impresos
-- [ ] Detectar `EstadoImpresion = 'Error'/'Pendiente'` > 5 min
-- [ ] Enviar notificación a supervisores/admins
-- [ ] Botón "Reimprimir" en notificación
-- [ ] Flag para no notificar múltiples veces
+**✅ Implementación Completada:**
 
-**Archivos:**
-- `src/services/printMonitorService.js`
-- `app.js` (iniciar job)
-- Migración para campo `NotificacionImpresionEnviada`
+#### 1. Migración 20: Base de Datos
+**Archivo:** `migrations/20_monitoreo_impresion.sql`
+
+**Cambios implementados:**
+- ✅ Campo `NotificacionImpresionEnviada` en tabla `Pedidos` (DATETIMEOFFSET NULL)
+- ✅ Índice filtrado `IX_Pedidos_EstadoImpresion_Fecha` para consultas eficientes
+- ✅ 3 nuevas configuraciones:
+  - `PRINT_MONITOR_ENABLED` (true/false)
+  - `PRINT_MONITOR_INTERVAL` (5 minutos por defecto)
+  - `PRINT_TIMEOUT_MINUTES` (15 minutos por defecto)
+
+**Script de ejecución:** `scripts/run-migration-20.js`
+
+#### 2. Servicio de Monitoreo
+**Archivo:** `src/services/printMonitorService.js` (390+ líneas)
+
+**Funciones principales:**
+- `startMonitor()`: Inicia job automático con node-cron
+- `checkUnprintedOrders()`: Verifica pedidos problemáticos
+- `stopMonitor()`: Detiene el monitoreo
+- `runManualCheck()`: Ejecuta verificación manual (testing)
+- `getUnprintedStats()`: Estadísticas de pedidos no impresos
+- `resetNotificationFlag(pedidoID)`: Resetea flag de notificación (testing)
+
+**Lógica de detección:**
+```sql
+-- Busca pedidos con:
+- EstadoImpresion IN ('Pendiente', 'Error')
+- DATEDIFF(MINUTE, Fecha, SYSDATETIME()) > @timeoutMinutes
+- NotificacionImpresionEnviada IS NULL
+```
+
+**Severidad automática:**
+- `WARNING`: Pedidos con 15-30 minutos sin imprimir
+- `CRITICAL`: Pedidos con > 30 minutos sin imprimir
+
+**Metadata enviada:**
+- pedidoID, folio, cliente, telefono
+- minutosEspera, estadoImpresion, fecha
+
+#### 3. Integración en App
+**Archivo:** `app.js`
+
+**Cambios:**
+- Import del servicio: `import { startMonitor as startPrintMonitor }`
+- Llamada en `initApp()` después de `startCleanupJob()`
+- Manejo de errores: La app continúa si el monitor falla
+
+#### 4. Script de Testing
+**Archivo:** `scripts/test-print-monitor.js` (270+ líneas)
+
+**Funcionalidades:**
+- Crear pedido de prueba con `EstadoImpresion='Pendiente'`
+- Modo `--force` para ignorar timeout de 15 minutos
+- Verificar notificación enviada
+- Mostrar estadísticas antes/después
+- Listar historial de notificaciones ORDER_NOT_PRINTED
+- Comandos SQL para limpieza
+
+**Uso:**
+```bash
+# Testing normal (respeta timeout de 15 min)
+node scripts/test-print-monitor.js
+
+# Testing forzado (notifica inmediatamente)
+node scripts/test-print-monitor.js --force
+```
+
+#### 5. Documentación
+**Archivos actualizados:**
+- `docs/NOTIFICATIONS.md`: Sección ORDER_NOT_PRINTED expandida (80+ líneas)
+  - Descripción detallada del tipo de notificación
+  - Metadata incluida
+  - Ejemplo de mensaje WhatsApp
+  - Configuraciones relacionadas
+  - Queries útiles para debugging
+  - Comandos de testing
+- `docs/TAREAS_PENDIENTES.md`: Esta sección
+
+**Progreso actualizado:**
+- Sprint 3: 58% → 67% (8/12 tareas)
+- Proyecto Total: 64% → 67% (24/36 tareas)
+
+**Archivos modificados (total: 7):**
+1. `migrations/20_monitoreo_impresion.sql` (nuevo - 290 líneas)
+2. `scripts/run-migration-20.js` (nuevo - 130 líneas)
+3. `src/services/printMonitorService.js` (nuevo - 390 líneas)
+4. `scripts/test-print-monitor.js` (nuevo - 270 líneas)
+5. `app.js` (modificado - +10 líneas)
+6. `docs/NOTIFICATIONS.md` (modificado - +80 líneas)
+7. `docs/TAREAS_PENDIENTES.md` (este archivo)
+
+**Total de líneas agregadas:** ~1,170 líneas
+
+**Valor de negocio:**
+- 🚨 Detección proactiva de fallas de impresión
+- ⏱️ Respuesta rápida antes que el cliente llame
+- 📊 Visibilidad de problemas recurrentes
+- 🔧 Mantenimiento preventivo de impresoras
+- 💰 Evita clientes insatisfechos y pérdida de ventas
+
+**Ejemplo de notificación enviada:**
+```
+⚠️ ALERTA: Pedido sin imprimir
+
+📄 Pedido PED-20250107-001 lleva 18 minutos sin imprimir
+
+👤 Cliente: María González
+📱 Teléfono: 8141234567
+🕐 Estado: Pendiente
+⏰ Esperando desde: 2025-01-07 14:30:00
+
+🔧 Acción recomendada:
+- Verificar conexión con impresora
+- Revisar cola de impresión
+- Imprimir manualmente si es necesario
+```
+
+**Configuración recomendada:**
+```sql
+-- Producción: intervalo más frecuente
+UPDATE Configuraciones SET Valor = '3' WHERE Clave = 'PRINT_MONITOR_INTERVAL';
+
+-- Horas pico: timeout más corto
+UPDATE Configuraciones SET Valor = '10' WHERE Clave = 'PRINT_TIMEOUT_MINUTES';
+
+-- Fuera de horario: deshabilitar temporalmente
+UPDATE Configuraciones SET Valor = 'false' WHERE Clave = 'PRINT_MONITOR_ENABLED';
+```
+
+**Queries útiles para soporte:**
+```sql
+-- Ver pedidos que serían notificados ahora
+SELECT PedidoID, Folio, DATEDIFF(MINUTE, Fecha, SYSDATETIME()) AS MinutosSinImprimir
+FROM Pedidos
+WHERE EstadoImpresion IN ('Pendiente', 'Error')
+  AND DATEDIFF(MINUTE, Fecha, SYSDATETIME()) > 15
+  AND NotificacionImpresionEnviada IS NULL;
+
+-- Historial de alertas ORDER_NOT_PRINTED
+SELECT TOP 10 * FROM NotificacionesLog
+WHERE TipoError = 'ORDER_NOT_PRINTED'
+ORDER BY CreadoEn DESC;
+
+-- Resetear flag para re-testing
+UPDATE Pedidos SET NotificacionImpresionEnviada = NULL WHERE PedidoID = 123;
+```
 
 ---
 

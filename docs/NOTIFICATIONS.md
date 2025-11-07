@@ -108,6 +108,9 @@ SELECT * FROM dbo.Configuraciones WHERE Categoria = 'NOTIFICATIONS';
 | `ERROR_NOTIFICATIONS_ENABLED` | `true` | Habilitar/deshabilitar notificaciones |
 | `NOTIFICATION_THROTTLE_MINUTES` | `15` | Minutos entre notificaciones del mismo tipo |
 | `PRINTING_ERROR_THRESHOLD` | `3` | Errores consecutivos antes de alerta crítica |
+| `PRINT_MONITOR_ENABLED` | `true` | Habilitar monitoreo de pedidos no impresos |
+| `PRINT_MONITOR_INTERVAL` | `5` | Intervalo del job de monitoreo (minutos) |
+| `PRINT_TIMEOUT_MINUTES` | `15` | Minutos de espera antes de notificar pedido no impreso |
 
 **Modificar configuración:**
 ```sql
@@ -313,11 +316,93 @@ El sistema está operativo nuevamente.
 ```
 
 ### 5. ORDER_NOT_PRINTED (Pedidos Sin Imprimir)
-**Severidad:** WARNING  
-**Origen:** `printMonitorService.js` (Tarea 8 - pendiente)
+**Severidad:** WARNING (automática) o CRITICAL (si > 30 minutos)  
+**Origen:** `printMonitorService.js` (Job automatizado cada 5 minutos)
 
-**Cuándo se enviará:**
-- Pedido lleva más de X minutos sin imprimirse
+**Cuándo se dispara:**
+- Un pedido tiene `EstadoImpresion` = 'Pendiente' o 'Error'
+- Ha pasado más de X minutos desde su creación (configurable con `PRINT_TIMEOUT_MINUTES`, por defecto 15)
+- No ha sido notificado anteriormente (`NotificacionImpresionEnviada IS NULL`)
+
+**Metadata incluida:**
+- `pedidoID`: ID del pedido sin imprimir
+- `folio`: Folio del pedido (ej: "PED-20250107-001")
+- `cliente`: Nombre del cliente
+- `telefono`: Teléfono del cliente
+- `minutosEspera`: Tiempo transcurrido sin imprimir
+- `estadoImpresion`: Estado actual ('Pendiente' o 'Error')
+- `fecha`: Fecha de creación del pedido
+
+**Ejemplo de mensaje WhatsApp:**
+```
+⚠️ ALERTA: Pedido sin imprimir
+
+📄 Pedido PED-20250107-001 lleva 18 minutos sin imprimir
+
+👤 Cliente: María González
+📱 Teléfono: 8141234567
+🕐 Estado: Pendiente
+⏰ Esperando desde: 2025-01-07 14:30:00
+
+🔧 Acción recomendada:
+- Verificar conexión con impresora
+- Revisar cola de impresión
+- Imprimir manualmente si es necesario
+```
+
+**Configuraciones relacionadas:**
+```sql
+-- Habilitar/deshabilitar monitoreo
+UPDATE Configuraciones SET Valor = 'true' WHERE Clave = 'PRINT_MONITOR_ENABLED';
+
+-- Intervalo del job (minutos)
+UPDATE Configuraciones SET Valor = '5' WHERE Clave = 'PRINT_MONITOR_INTERVAL';
+
+-- Tiempo de espera antes de alertar (minutos)
+UPDATE Configuraciones SET Valor = '15' WHERE Clave = 'PRINT_TIMEOUT_MINUTES';
+```
+
+**Queries útiles:**
+```sql
+-- Ver pedidos que serían notificados ahora
+SELECT 
+  PedidoID,
+  Folio,
+  EstadoImpresion,
+  Fecha,
+  DATEDIFF(MINUTE, Fecha, SYSDATETIME()) AS MinutosSinImprimir,
+  NotificacionImpresionEnviada
+FROM Pedidos
+WHERE EstadoImpresion IN ('Pendiente', 'Error')
+  AND DATEDIFF(MINUTE, Fecha, SYSDATETIME()) > 15
+  AND NotificacionImpresionEnviada IS NULL
+ORDER BY Fecha;
+
+-- Resetear flag de notificación (para testing)
+UPDATE Pedidos 
+SET NotificacionImpresionEnviada = NULL 
+WHERE PedidoID = 123;
+
+-- Ver historial de notificaciones de pedidos no impresos
+SELECT 
+  TipoError,
+  Severidad,
+  Mensaje,
+  Estado,
+  CreadoEn
+FROM NotificacionesLog
+WHERE TipoError = 'ORDER_NOT_PRINTED'
+ORDER BY CreadoEn DESC;
+```
+
+**Testing:**
+```bash
+# Ejecutar verificación manual (sin esperar 15 minutos)
+node scripts/test-print-monitor.js --force
+
+# Ver estadísticas actuales
+# (Usar API /admin/notifications/stats cuando esté disponible)
+```
 
 ### 6. WEBHOOK_INVALID (Webhook Inválido)
 **Severidad:** WARNING  
