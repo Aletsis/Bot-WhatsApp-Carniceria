@@ -38,6 +38,7 @@ router.get('/chats/search-conversations', dashboardController.searchConversation
 router.get('/chats/stats', dashboardController.getMessageStats);
 router.get('/chats/:telefono', dashboardController.getMessageHistory);
 router.post('/chats/:telefono/mark-read', dashboardController.markMessagesAsRead);
+router.post('/chats/:telefono/send', dashboardController.sendMessageToClient);
 
 // API endpoints - Usuarios (solo para admins)
 router.get('/usuarios', requireRole('admin'), dashboardController.getUsuarios);

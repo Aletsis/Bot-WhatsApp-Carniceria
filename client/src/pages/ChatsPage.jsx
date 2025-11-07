@@ -13,6 +13,8 @@ export default function ChatsPage() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState('conversations'); // 'conversations' o 'messages'
+  const [newMessage, setNewMessage] = useState('');
+  const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
 
   // Cargar lista de conversaciones al montar
@@ -24,6 +26,12 @@ export default function ChatsPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Resetear estado de envío cuando se cambia de conversación
+  useEffect(() => {
+    setNewMessage('');
+    setSending(false);
+  }, [selectedPhone]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -135,6 +143,50 @@ export default function ChatsPage() {
     setMessages([]);
     setSelectedPhone(null);
     loadConversations();
+  };
+
+  /**
+   * Envía un mensaje al cliente seleccionado
+   */
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    
+    if (!newMessage.trim() || !selectedPhone) {
+      return;
+    }
+    
+    try {
+      setSending(true);
+      
+      const response = await api.post(`/dashboard/chats/${selectedPhone}/send`, {
+        mensaje: newMessage
+      });
+      
+      if (response.data.success) {
+        // Limpiar input
+        setNewMessage('');
+        
+        // Recargar mensajes para mostrar el nuevo
+        await loadMessages(selectedPhone);
+        
+        // Actualizar lista de conversaciones (cambió el último mensaje)
+        loadConversations();
+        
+        // Scroll al final
+        setTimeout(() => {
+          const messagesContainer = document.querySelector('.messages-container');
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Error enviando mensaje:', error);
+      const errorMsg = error.response?.data?.message || 'Error al enviar el mensaje. Intenta de nuevo.';
+      alert(errorMsg);
+    } finally {
+      setSending(false);
+    }
   };
 
   /**
@@ -371,6 +423,36 @@ export default function ChatsPage() {
                   </>
                 )}
               </div>
+
+              {/* Input de mensaje - solo visible cuando hay una conversación seleccionada */}
+              {selectedPhone && (
+                <div className="message-input-container">
+                  <form onSubmit={sendMessage} className="message-input-form">
+                    <textarea
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Escribe un mensaje..."
+                      className="message-input"
+                      rows="3"
+                      disabled={sending}
+                      onKeyDown={(e) => {
+                        // Enviar con Ctrl+Enter
+                        if (e.key === 'Enter' && e.ctrlKey) {
+                          e.preventDefault();
+                          sendMessage(e);
+                        }
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="send-button"
+                      disabled={!newMessage.trim() || sending}
+                    >
+                      {sending ? '⏳ Enviando...' : '✉️ Enviar'}
+                    </button>
+                  </form>
+                </div>
+              )}
             </>
           )}
         </div>

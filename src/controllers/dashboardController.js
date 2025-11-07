@@ -1059,3 +1059,36 @@ export async function searchConversations(req, res) {
     res.status(500).json({ success: false, error: err.message });
   }
 }
+
+/**
+ * Envía un mensaje de texto al cliente desde el dashboard
+ */
+export async function sendMessageToClient(req, res) {
+  try {
+    const { telefono } = req.params;
+    const { mensaje } = req.body;
+    
+    if (!telefono) {
+      return res.status(400).json({ success: false, error: 'Número de teléfono requerido' });
+    }
+    
+    if (!mensaje || mensaje.trim() === '') {
+      return res.status(400).json({ success: false, error: 'Mensaje no puede estar vacío' });
+    }
+    
+    // Enviar mensaje a través de WhatsApp
+    await whatsappService.sendText(telefono, mensaje.trim());
+    
+    logger.info(`[Dashboard] Mensaje enviado a ${telefono} por usuario ${req.session.user?.Username}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Mensaje enviado exitosamente',
+      telefono,
+      sentBy: req.session.user?.Username
+    });
+  } catch (err) {
+    logger.error('❌ Error enviando mensaje:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
