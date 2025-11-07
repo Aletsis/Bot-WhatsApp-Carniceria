@@ -62,12 +62,20 @@ export async function messageWebhookHandler(req, res) {
     // Guardar mensaje recibido en BD
     try {
       const tipoMensaje = message.type || 'text';
-      const contenido = text || (buttonId ? `[Botón: ${buttonId}]` : '[Mensaje interactivo]');
+      let contenido = text;
+      
+      // Si es un botón, guardar el título del botón presionado
+      if (buttonId && message.interactive?.button_reply) {
+        const buttonTitle = message.interactive.button_reply.title;
+        contenido = buttonTitle || buttonId;
+      }
+      
       const metadata = {
         messageId: message.id,
         timestamp: message.timestamp,
         type: message.type,
-        interactive: message.interactive || null
+        interactive: message.interactive || null,
+        buttonId: buttonId || null
       };
       
       await saveMessage(from, 'recibido', contenido, tipoMensaje, metadata);

@@ -149,6 +149,53 @@ export default function ChatsPage() {
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
   };
 
+  /**
+   * Renderiza el contenido del mensaje con formato especial para botones
+   */
+  const renderMessageContent = (msg) => {
+    try {
+      const metadata = msg.MetadataWhatsApp;
+      
+      // Si es un mensaje recibido con botón (respuesta del cliente)
+      if (msg.Tipo === 'recibido' && metadata?.buttonId) {
+        return (
+          <div className="button-response">
+            <span className="button-icon">🔘</span>
+            <span className="button-text">{msg.Contenido}</span>
+          </div>
+        );
+      }
+      
+      // Si el contenido tiene botones (mensaje enviado con opciones)
+      if (msg.Contenido.includes('[Botones:')) {
+        const parts = msg.Contenido.split('[Botones:');
+        const mainText = parts[0].trim();
+        const buttonsText = parts[1]?.replace(']', '').trim();
+        
+        if (buttonsText) {
+          const buttons = buttonsText.split(',').map(b => b.trim());
+          return (
+            <div className="message-with-buttons">
+              <div className="message-text">{mainText}</div>
+              <div className="message-buttons">
+                {buttons.map((btn, idx) => (
+                  <div key={idx} className="message-button-item">
+                    {btn}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+      }
+      
+      // Mensaje normal
+      return <div className="message-text">{msg.Contenido}</div>;
+    } catch (error) {
+      return <div className="message-text">{msg.Contenido}</div>;
+    }
+  };
+
   return (
     <div className="chats-page">
       <div className="chats-header">
@@ -269,7 +316,9 @@ export default function ChatsPage() {
                         className={`message ${msg.Tipo === 'enviado' ? 'sent' : 'received'}`}
                       >
                         <div className="message-bubble">
-                          <div className="message-content">{msg.Contenido}</div>
+                          <div className="message-content">
+                            {renderMessageContent(msg)}
+                          </div>
                           <div className="message-time">
                             {new Date(msg.Fecha).toLocaleString('es-MX', {
                               day: '2-digit',

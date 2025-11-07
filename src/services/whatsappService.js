@@ -186,7 +186,16 @@ function extractMessageContent(payload) {
   } else if (payload.type === 'interactive') {
     const interactive = payload.interactive;
     if (interactive.type === 'button') {
-      return interactive.body?.text || '[Mensaje con botones]';
+      const bodyText = interactive.body?.text || '[Mensaje con botones]';
+      const buttons = interactive.action?.buttons || [];
+      
+      // Retornar el texto del cuerpo más los títulos de los botones
+      if (buttons.length > 0) {
+        const buttonTitles = buttons.map(btn => btn.reply?.title || btn.reply?.id).join(', ');
+        return `${bodyText}\n[Botones: ${buttonTitles}]`;
+      }
+      
+      return bodyText;
     } else if (interactive.type === 'list') {
       return interactive.body?.text || '[Mensaje con lista]';
     }
