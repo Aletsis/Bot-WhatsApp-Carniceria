@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import webhookRouter from './src/routes/webhook.js';
 import dashboardRouter from './src/routes/dashboard.js';
 import authRouter from './src/routes/auth.js';
+import healthRouter from './src/routes/health.js';
 import { getPool, getPoolInstance } from './src/services/dbService.js';
 import { initializeDatabase, checkSqlServerConnection } from './src/services/dbInitService.js';
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
@@ -118,6 +119,9 @@ if (isProduction) {
   // En desarrollo, el cliente React se sirve en puerto 5173 con Vite
   logger.info('🔧 Modo desarrollo: Dashboard React en http://localhost:5173');
 }
+
+// Rutas públicas (sin autenticación)
+app.use('/health', healthRouter); // Health checks para monitoreo
 
 // Rutas públicas API
 app.use('/webhook', webhookLimiter, webhookRouter);

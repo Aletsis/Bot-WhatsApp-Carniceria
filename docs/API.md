@@ -4,6 +4,163 @@ Documentación completa de los endpoints de la API del Bot WhatsApp Carnicería.
 
 ---
 
+## 🏥 Health Check
+
+Endpoints públicos para monitoreo del estado del sistema. No requieren autenticación.
+
+### GET `/health`
+
+Health check completo del sistema. Verifica el estado de todos los servicios críticos.
+
+**Response Success (200):**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-01-06T10:30:00.000Z",
+  "uptime": 86400,
+  "responseTime": 45,
+  "services": {
+    "database": {
+      "status": "up",
+      "responseTime": 35
+    },
+    "whatsapp": {
+      "status": "configured",
+      "responseTime": 5
+    },
+    "disk": {
+      "status": "ok",
+      "usage": "45.2",
+      "details": {
+        "total": "250.00 GB",
+        "free": "137.00 GB",
+        "used": "113.00 GB",
+        "usagePercent": "45.2%"
+      }
+    },
+    "memory": {
+      "status": "ok",
+      "usage": "62.3%",
+      "details": {
+        "total": "16.00 GB",
+        "used": "9.97 GB",
+        "free": "6.03 GB",
+        "usagePercent": "62.3%"
+      }
+    }
+  },
+  "system": {
+    "platform": "win32",
+    "nodeVersion": "v20.11.0",
+    "pid": 12345,
+    "hostname": "SERVER-001"
+  }
+}
+```
+
+**Response Unhealthy (503):**
+```json
+{
+  "status": "unhealthy",
+  "timestamp": "2025-01-06T10:30:00.000Z",
+  "uptime": 86400,
+  "responseTime": 5045,
+  "services": {
+    "database": {
+      "status": "down",
+      "responseTime": 5000,
+      "error": "Connection timeout"
+    },
+    "whatsapp": {
+      "status": "configured",
+      "responseTime": 5
+    },
+    "disk": {
+      "status": "critical",
+      "usage": "92.5",
+      "details": {
+        "total": "250.00 GB",
+        "free": "18.75 GB",
+        "used": "231.25 GB",
+        "usagePercent": "92.5%"
+      }
+    },
+    "memory": {
+      "status": "warning",
+      "usage": "85.0%",
+      "details": {
+        "total": "16.00 GB",
+        "used": "13.60 GB",
+        "free": "2.40 GB",
+        "usagePercent": "85.0%"
+      }
+    }
+  },
+  "system": {
+    "platform": "win32",
+    "nodeVersion": "v20.11.0",
+    "pid": 12345,
+    "hostname": "SERVER-001"
+  }
+}
+```
+
+**Estados posibles:**
+- `healthy`: Sistema funcionando correctamente
+- `healthy_with_warnings`: Funcionando pero con advertencias (uso de recursos alto)
+- `degraded`: Funcionando pero con problemas no críticos
+- `unhealthy`: Problemas críticos (devuelve HTTP 503)
+
+**Niveles de estado de servicios:**
+- `up` / `ok`: Servicio funcionando
+- `warning`: Alto uso de recursos (>80%)
+- `critical`: Uso de recursos muy alto (>90%)
+- `down`: Servicio no disponible
+- `configured` / `not_configured`: Estado de configuración
+
+---
+
+### GET `/health/live`
+
+Liveness probe simplificado. Verifica que el servidor esté respondiendo.
+
+**Uso:** Health checks de Kubernetes/Docker para reiniciar contenedores no responsivos.
+
+**Response (200):**
+```json
+{
+  "status": "alive",
+  "timestamp": "2025-01-06T10:30:00.000Z"
+}
+```
+
+---
+
+### GET `/health/ready`
+
+Readiness probe. Verifica que el sistema esté listo para recibir tráfico.
+
+**Uso:** Load balancers para decidir si enviar tráfico al servidor.
+
+**Response Ready (200):**
+```json
+{
+  "status": "ready",
+  "timestamp": "2025-01-06T10:30:00.000Z"
+}
+```
+
+**Response Not Ready (503):**
+```json
+{
+  "status": "not_ready",
+  "timestamp": "2025-01-06T10:30:00.000Z",
+  "reason": "Database unavailable"
+}
+```
+
+---
+
 ## 🔐 Autenticación
 
 Todas las rutas del dashboard requieren autenticación mediante sesiones. Las sesiones se mantienen mediante cookies `httpOnly`.
