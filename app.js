@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import cron from 'node-cron';
 import webhookRouter from './src/routes/webhook.js';
 import dashboardRouter from './src/routes/dashboard.js';
 import authRouter from './src/routes/auth.js';
@@ -14,7 +15,8 @@ import { initializeDatabase, checkSqlServerConnection } from './src/services/dbI
 import { gracefulShutdown } from './src/helpers/shutdownHelper.js';
 import { restoreActiveTimeouts, startCleanupJob } from './src/services/sessionTimeoutService.js';
 import { captureRawBody, validateWebhookSecurityConfig } from './src/middleware/webhookVerification.js';
-import logger from './src/logger.js';
+import logger, { cleanOldLogs } from './src/logger.js';
+import backupService from './src/services/backupService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -172,6 +174,92 @@ async function initApp() {
     
     // Iniciar job de limpieza periódica de sesiones abandonadas
     startCleanupJob();
+    
+    // Iniciar job de limpieza de logs antiguos (cada 24 horas)
+    if (isProduction) {
+      setInterval(async () => {
+        try {
+          logger.info('🗑️ Iniciando limpieza automática de logs antiguos...');
+          const deleted = await cleanOldLogs();
+          if (deleted > 0) {
+            logger.info(`✅ Limpieza de logs completada: ${deleted} archivos eliminados`);
+          }
+        } catch (err) {
+          logger.error('❌ Error en limpieza automática de logs:', err);
+        }
+      }, 24 * 60 * 60 * 1000); // 24 horas
+      
+      logger.info('🕐 Job de limpieza de logs iniciado (intervalo: 24 horas)');
+    }
+    
+    // Iniciar sistema de respaldos automáticos
+    const backupEnabled = process.env.BACKUP_ENABLED === 'true';
+    
+    if (isProduction && backupEnabled) {
+      logger.info('💾 Iniciando sistema de respaldos automáticos...');
+      
+      // Respaldo completo (FULL) - Por defecto diario a las 2:00 AM
+      const fullSchedule = process.env.BACKUP_SCHEDULE_FULL || '0 2 * * *';
+      cron.schedule(fullSchedule, async () => {
+        try {
+          logger.info('🔵 Ejecutando respaldo completo programado...');
+          const result = await backupService.runBackupCycle('full');
+          logger.info({
+            fileName: result.backup.fileName,
+            size: `${result.backup.size} MB`,
+            duration: `${result.totalDuration}s`,
+            cleaned: result.cleaned.deletedCount
+          }, '✅ Respaldo completo completado');
+        } catch (err) {
+          logger.error({ error: err.message }, '❌ Error en respaldo completo programado');
+        }
+      }, {
+        scheduled: true,
+        timezone: 'America/Mexico_City' // Ajustar según tu zona horaria
+      });
+      
+      logger.info(`🔵 Respaldos FULL programados: ${fullSchedule}`);
+      
+      // Respaldo diferencial (DIFF) - Por defecto cada 6 horas
+      const diffSchedule = process.env.BACKUP_SCHEDULE_DIFF || '0 */6 * * *';
+      cron.schedule(diffSchedule, async () => {
+        try {
+          logger.info('🟡 Ejecutando respaldo diferencial programado...');
+          const result = await backupService.runBackupCycle('diff');
+          logger.info({
+            fileName: result.backup.fileName,
+            size: `${result.backup.size} MB`,
+            duration: `${result.totalDuration}s`
+          }, '✅ Respaldo diferencial completado');
+        } catch (err) {
+          logger.error({ error: err.message }, '❌ Error en respaldo diferencial programado');
+        }
+      }, {
+        scheduled: true,
+        timezone: 'America/Mexico_City' // Ajustar según tu zona horaria
+      });
+      
+      logger.info(`🟡 Respaldos DIFF programados: ${diffSchedule}`);
+      
+      // Mostrar estadísticas iniciales
+      try {
+        const stats = await backupService.getBackupStats();
+        logger.info({
+          directory: stats.directory,
+          totalFiles: stats.totalFiles,
+          fullBackups: stats.fullBackups,
+          diffBackups: stats.diffBackups,
+          totalSize: `${stats.totalSizeMB} MB`
+        }, '📊 Estadísticas iniciales de respaldos');
+      } catch (err) {
+        logger.warn({ error: err.message }, 'No se pudieron obtener estadísticas de respaldos');
+      }
+      
+    } else if (!isProduction) {
+      logger.info('💾 Respaldos automáticos deshabilitados (modo desarrollo)');
+    } else {
+      logger.info('💾 Respaldos automáticos deshabilitados (BACKUP_ENABLED=false)');
+    }
     
     logger.info('🚀 Aplicación inicializada correctamente');
   } catch (err) {

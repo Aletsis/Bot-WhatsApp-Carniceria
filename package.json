@@ -15,7 +15,15 @@
     "generate-secret": "node scripts/generate-session-secret.js",
     "prod": "set NODE_ENV=production && node app.js",
     "lint": "eslint src/** --fix",
-    "format": "prettier --write './src/**/*.js'"
+    "format": "prettier --write './src/**/*.js'",
+    "logs:test": "node scripts/test-logs.js",
+    "logs:stats": "node -e \"import('./src/logger.js').then(m => m.getLogStats().then(s => console.log(JSON.stringify(s, null, 2))))\"",
+    "logs:clean": "node -e \"import('./src/logger.js').then(m => m.cleanOldLogs())\"",
+    "backup:full": "node scripts/backup-database.js full",
+    "backup:diff": "node scripts/backup-database.js diff",
+    "backup:stats": "node scripts/backup-database.js stats",
+    "backup:clean": "node scripts/backup-database.js clean",
+    "backup:test": "node scripts/test-backup.js"
   },
   "lint-staged": {
     "src/**/*.js": [
@@ -37,8 +45,10 @@
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.2",
     "mssql": "^11.0.1",
+    "node-cron": "^4.2.1",
     "pino": "^9.11.0",
-    "pino-pretty": "^13.1.1"
+    "pino-pretty": "^13.1.1",
+    "pino-roll": "^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
