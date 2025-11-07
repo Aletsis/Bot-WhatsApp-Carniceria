@@ -10,15 +10,18 @@ import { getPool } from './dbService.js';
  * 2. Crear la base de datos si no existe
  * 3. Crear todas las tablas necesarias:
  *    - Clientes
- *    - Pedidos
- *    - Conversaciones
+ *    - Pedidos (con Version para concurrencia)
+ *    - Conversaciones (con TimeoutExpiraEn y Version)
  *    - TelefonosAtencion
  *    - Usuarios (para dashboard)
  *    - LogAccesos (auditoría de accesos)
- * 4. Crear índices para optimizar rendimiento
+ *    - Configuraciones (configuraciones del sistema)
+ *    - Mensajes (historial de chats)
+ * 4. Crear índices para optimizar rendimiento (16 índices)
  * 5. Insertar datos iniciales:
  *    - Teléfonos de atención
  *    - Usuario admin (username: admin, password: admin123)
+ *    - Configuraciones por defecto del sistema
  * 
  * La inicialización es automática al arrancar la app.
  * También puede ejecutarse manualmente con: npm run init-db
@@ -126,6 +129,7 @@ async function createDatabase(dbName) {
         EstadoImpresion NVARCHAR(50) NOT NULL DEFAULT 'Pendiente',
         FechaImpresion DATETIME2 NULL,
         ErrorImpresion NVARCHAR(500) NULL,
+        Version INT NOT NULL DEFAULT 0,
         CONSTRAINT CK_Pedidos_EstadoImpresion CHECK (EstadoImpresion IN ('Pendiente', 'Impreso', 'Error', 'NoRequerida', 'Reimprimiendo'))
       )
     `);
@@ -139,7 +143,8 @@ async function createDatabase(dbName) {
         Buffer NVARCHAR(MAX) NULL,
         NombreTemporal NVARCHAR(200) NULL,
         UltimaInteraccion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
-        TimeoutExpiraEn DATETIME2 NULL
+        TimeoutExpiraEn DATETIME2 NULL,
+        Version INT NOT NULL DEFAULT 0
       )
     `);
     logger.info('[DB Init] ✅ Tabla Conversaciones creada');
@@ -199,6 +204,75 @@ async function createDatabase(dbName) {
     `);
     logger.info('[DB Init] ✅ Índices de LogAccesos creados');
     
+    // Crear tabla Configuraciones
+    await pool.request().query(`
+      CREATE TABLE Configuraciones (
+        ConfigID INT PRIMARY KEY IDENTITY(1,1),
+        Clave NVARCHAR(100) NOT NULL UNIQUE,
+        Valor NVARCHAR(500) NOT NULL,
+        Descripcion NVARCHAR(500),
+        Tipo NVARCHAR(50) NOT NULL,
+        Categoria NVARCHAR(50) NOT NULL,
+        Editable BIT NOT NULL DEFAULT 1,
+        FechaCreacion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+        FechaActualizacion DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+      )
+    `);
+    logger.info('[DB Init] ✅ Tabla Configuraciones creada');
+    
+    // Crear índice para Configuraciones
+    await pool.request().query(`
+      CREATE INDEX IX_Configuraciones_Categoria ON Configuraciones(Categoria);
+    `);
+    logger.info('[DB Init] ✅ Índice de Configuraciones creado');
+    
+    // Insertar configuraciones por defecto
+    await pool.request().query(`
+      INSERT INTO Configuraciones (Clave, Valor, Descripcion, Tipo, Categoria, Editable)
+      VALUES
+      -- === PRINTER ===
+      ('PRINTER_ENABLED', 'false', 'Habilitar/deshabilitar impresión de tickets', 'boolean', 'PRINTER', 1),
+      ('PRINTER_HOST', '192.168.0.100', 'Dirección IP de la impresora ESC/POS', 'string', 'PRINTER', 1),
+      ('PRINTER_PORT', '9100', 'Puerto de la impresora (típicamente 9100)', 'number', 'PRINTER', 1),
+      
+      -- === WHATSAPP ===
+      ('WHATSAPP_TOKEN', '', 'Token de acceso de WhatsApp Business API', 'secret', 'WHATSAPP', 1),
+      ('PHONE_NUMBER_ID', '', 'ID del número de teléfono de WhatsApp', 'string', 'WHATSAPP', 1),
+      ('WEBHOOK_VERIFY_TOKEN', '', 'Token para verificar webhook de Meta', 'secret', 'WHATSAPP', 1),
+      ('APP_SECRET', '', 'App Secret de Meta para verificación de firma', 'secret', 'WHATSAPP', 1),
+      
+      -- === SYSTEM ===
+      ('SESSION_TIMEOUT', '5', 'Timeout de sesión en minutos (5 min default)', 'number', 'SYSTEM', 1),
+      ('CONVERSATION_TIMEOUT', '30', 'Timeout de conversación en minutos (30 min default)', 'number', 'SYSTEM', 1),
+      ('SESSION_TTL_MINUTES', '1440', 'Tiempo de vida de sesión HTTP en minutos (24h default)', 'number', 'SYSTEM', 1),
+      
+      -- === NOTIFICATIONS ===
+      ('NOTIFICATIONS_ENABLED', 'true', 'Habilitar notificaciones automáticas a clientes', 'boolean', 'NOTIFICATIONS', 1)
+    `);
+    logger.info('[DB Init] ✅ Configuraciones por defecto insertadas');
+    
+    // Crear tabla Mensajes (historial de chats)
+    await pool.request().query(`
+      CREATE TABLE Mensajes (
+        MensajeID BIGINT PRIMARY KEY IDENTITY(1,1),
+        NumeroTelefono NVARCHAR(30) NOT NULL,
+        Tipo NVARCHAR(20) NOT NULL CHECK (Tipo IN ('recibido', 'enviado')),
+        Contenido NVARCHAR(MAX) NOT NULL,
+        TipoMensaje NVARCHAR(50) DEFAULT 'texto',
+        MetadataWhatsApp NVARCHAR(MAX),
+        Estado NVARCHAR(20) DEFAULT 'entregado',
+        Fecha DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+      )
+    `);
+    logger.info('[DB Init] ✅ Tabla Mensajes creada');
+    
+    // Crear índices para Mensajes
+    await pool.request().query(`
+      CREATE INDEX IX_Mensajes_Telefono_Fecha ON Mensajes(NumeroTelefono, Fecha DESC);
+      CREATE INDEX IX_Mensajes_Fecha ON Mensajes(Fecha DESC);
+    `);
+    logger.info('[DB Init] ✅ Índices de Mensajes creados');
+    
     // Crear índices adicionales para mejorar rendimiento
     await pool.request().query(`
       CREATE INDEX IX_Pedidos_ClienteID ON Pedidos(ClienteID);
@@ -206,6 +280,7 @@ async function createDatabase(dbName) {
       CREATE INDEX IX_Pedidos_Fecha ON Pedidos(Fecha);
       CREATE INDEX IX_Pedidos_EstadoImpresion ON Pedidos(EstadoImpresion);
       CREATE INDEX IX_Conversaciones_UltimaInteraccion ON Conversaciones(UltimaInteraccion);
+      CREATE INDEX IX_Conversaciones_NumeroTelefono_Version ON Conversaciones(NumeroTelefono, Version);
     `);
     logger.info('[DB Init] ✅ Índices adicionales creados');
     
@@ -350,10 +425,10 @@ async function checkTablesExist(dbName) {
     const result = await pool.request().query(`
       SELECT COUNT(*) as TableCount 
       FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones')
+      WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes')
     `);
     
-    const expectedTables = 7; // Ahora esperamos 7 tablas (incluyendo Configuraciones)
+    const expectedTables = 8; // Ahora esperamos 8 tablas (incluyendo Configuraciones y Mensajes)
     const foundTables = result.recordset[0].TableCount;
     
     if (foundTables < expectedTables) {
@@ -363,11 +438,11 @@ async function checkTablesExist(dbName) {
       const tablesCheck = await pool.request().query(`
         SELECT TABLE_NAME 
         FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones')
+        WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes')
       `);
       
       const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
-      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones'];
+      const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes'];
       const missingTables = allTables.filter(t => !existingTables.includes(t));
       
       if (missingTables.length > 0) {
@@ -433,11 +508,11 @@ export async function initializeDatabase() {
         const tablesCheck = await pool.request().query(`
           SELECT TABLE_NAME 
           FROM INFORMATION_SCHEMA.TABLES 
-          WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos')
+          WHERE TABLE_NAME IN ('Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes')
         `);
         
         const existingTables = tablesCheck.recordset.map(r => r.TABLE_NAME);
-        const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos'];
+        const allTables = ['Clientes', 'Pedidos', 'Conversaciones', 'TelefonosAtencion', 'Usuarios', 'LogAccesos', 'Configuraciones', 'Mensajes'];
         const missingTables = allTables.filter(t => !existingTables.includes(t));
         
         if (missingTables.length > 0) {
