@@ -55,7 +55,15 @@ export const AuthProvider = ({ children }) => {
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.Rol === 'admin',
-    isEditor: user?.Rol === 'admin' || user?.Rol === 'editor',
+    isSupervisor: user?.Rol === 'supervisor',
+    isEditor: user?.Rol === 'editor',
+    isViewer: user?.Rol === 'viewer',
+    // Helpers de permisos combinados
+    canManageUsers: user?.Rol === 'admin', // Solo admin
+    canManageConfig: user?.Rol === 'admin', // Solo admin
+    canManageOrders: ['admin', 'supervisor', 'editor'].includes(user?.Rol), // Admin, supervisor o editor
+    canViewAll: ['admin', 'supervisor'].includes(user?.Rol), // Admin o supervisor
+    canEdit: ['admin', 'supervisor', 'editor'].includes(user?.Rol), // Admin, supervisor o editor
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

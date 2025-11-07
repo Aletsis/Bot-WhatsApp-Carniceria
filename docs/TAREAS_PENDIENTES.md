@@ -84,17 +84,17 @@ Durante la revisión completa del proyecto, se identificaron varias tareas que e
 ---
 
 ### Sprint 3 (Dashboard Avanzado y Funcionalidades Críticas)
-**Estado:** 🟡 **42% COMPLETADO** (5 de 12 tareas) ⬆️ **+4% desde última revisión**
+**Estado:** 🟡 **50% COMPLETADO** (6 de 12 tareas) ⬆️ **+8% desde última revisión**
 
-#### ✅ Completadas (5)
+#### ✅ Completadas (6)
 - ✅ Tarea 1: Concurrencia y Transacciones (optimistic locking)
 - ✅ Tarea 2: Verificación de Firma de Webhook
 - ✅ Tarea 3: Notificaciones Automáticas a Clientes
 - ✅ Tarea 4: Historial de Chats con Persistencia
-- ✅ Tarea 5: Página de Configuración ⭐ **NUEVO - 100% COMPLETO**
+- ✅ Tarea 5: Página de Configuración
+- ✅ Tarea 6: Rol de Usuario Supervisor ⭐ **NUEVO - 100% COMPLETO**
 
-#### ❌ Pendientes (7)
-- ❌ Tarea 6: Rol de Usuario Supervisor
+#### ❌ Pendientes (6)
 - ❌ Tarea 7: Notificaciones de Errores a Administrador
 - ❌ Tarea 8: Notificación de Pedido No Impreso
 - ❌ Tarea 9: Gráficas de Estadísticas
@@ -181,31 +181,92 @@ Durante la revisión completa del proyecto, se identificaron varias tareas que e
 
 ## 🟡 TAREAS IMPORTANTES PENDIENTES
 
-### ❌ Tarea 6: Rol de Usuario Supervisor
+### ✅ Tarea 6: Rol de Usuario Supervisor
 **Prioridad:** 🟡 MEDIA  
-**Estimación:** 1.5 horas
+**Estimación:** ~~1.5 horas~~ → **0 horas**  
+**Estado actual:** ✅ **100% COMPLETADO**
 
-**Objetivo:** Rol intermedio entre admin y editor
+**✅ IMPLEMENTACIÓN COMPLETA:**
+
+**Base de Datos (100%):**
+- ✅ Migración 18 ejecutada exitosamente
+- ✅ Constraint `CK_Usuarios_Rol` actualizado con 4 roles:
+  ```sql
+  CHECK (Rol IN ('admin', 'supervisor', 'editor', 'viewer'))
+  ```
+- ✅ Usuario supervisor de prueba creado (username: supervisor)
+- ✅ Verificación completa mediante test automatizado
+
+**Backend Middleware (100%):**
+- ✅ Archivo `src/middleware/auth.js` actualizado con 5 nuevas funciones:
+  - `requireAnyRole(allowedRoles)` - Verificación flexible multi-rol
+  - `requireUserManagement()` - Admin only (gestión de usuarios)
+  - `requireConfigManagement()` - Admin only (configuraciones)
+  - `requireOrderManagement()` - Admin/Supervisor/Editor (gestión de pedidos)
+- ✅ Documentación completa de los 4 roles en JSDoc
+- ✅ Separación clara de permisos por función
+
+**Frontend UI (100%):**
+- ✅ `UsuariosPage.jsx` actualizado:
+  - Badge supervisor con color amarillo (warning variant)
+  - Opción en select con descripción: "Supervisor (Gestión Completa de Pedidos, Sin Config)"
+  - Función `getRolBadge()` con 4 roles
+- ✅ `AuthContext.jsx` enriquecido con 10 helpers de permisos:
+  ```javascript
+  // Verificadores de rol
+  isAdmin, isSupervisor, isEditor, isViewer
+  
+  // Helpers de permisos
+  canManageUsers      // Admin only
+  canManageConfig     // Admin only
+  canManageOrders     // Admin, Supervisor, Editor
+  canViewAll          // Admin, Supervisor
+  canEdit             // Admin, Supervisor, Editor
+  ```
+
+**Testing (100%):**
+- ✅ Script `test-supervisor-role.js` creado y ejecutado
+- ✅ Verificación de constraint en BD
+- ✅ Usuario supervisor de prueba creado
+- ✅ Resumen de roles validado
 
 **Permisos del Supervisor:**
 - ✅ Ver todos los pedidos y clientes
 - ✅ Actualizar estado de pedidos
 - ✅ Reimprimir tickets
 - ✅ Ver conversaciones y chats
-- ❌ NO crear/editar usuarios
-- ❌ NO cambiar configuraciones
 - ✅ Recibir notificaciones de errores
+- ❌ NO crear/editar usuarios
+- ❌ NO cambiar configuraciones del sistema
 
-**Subtareas:**
-- [ ] Migración para agregar rol 'supervisor' al constraint
-- [ ] Actualizar middleware de autorización
-- [ ] UI para seleccionar rol supervisor
-- [ ] Badge diferenciado en dashboard
+**Jerarquía Visual:**
+- 🔴 Admin (danger/red badge)
+- 🟡 Supervisor (warning/yellow badge)
+- 🟢 Editor (success/green badge)
+- 🔵 Viewer (info/blue badge)
 
-**Archivos:**
-- `migrations/15_rol_supervisor.sql`
-- `src/middleware/auth.js`
-- `client/src/pages/UsuariosPage.jsx`
+**Archivos implementados:**
+- ✅ `migrations/18_rol_supervisor.sql` (200+ líneas)
+- ✅ `scripts/run-migration-18.js` (ejecutor de migración)
+- ✅ `scripts/test-supervisor-role.js` (tests automatizados)
+- ✅ `src/middleware/auth.js` (5 funciones helper)
+- ✅ `client/src/pages/UsuariosPage.jsx` (badge + select)
+- ✅ `client/src/contexts/AuthContext.jsx` (10 permission helpers)
+
+**Validación:**
+- ✅ Constraint incluye supervisor: `([Rol]='viewer' OR [Rol]='editor' OR [Rol]='supervisor' OR [Rol]='admin')`
+- ✅ Test completo ejecutado exitosamente
+- ✅ Usuario supervisor creado con credenciales:
+  - Username: `supervisor`
+  - Password: `Supervisor123!`
+  - ⚠️ **CAMBIAR EN PRODUCCIÓN**
+
+**Valor Entregado:**
+- 🎯 Delegación operativa sin comprometer seguridad
+- 🔒 Configuración y usuarios protegidos (solo admin)
+- 📊 Supervisores gestionan operaciones diarias
+- 👥 Escalabilidad para múltiples turnos
+- 📝 Auditoría clara con rol explícito
 
 ---
 

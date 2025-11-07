@@ -36,6 +36,13 @@ export function redirectIfAuth(req, res, next) {
 
 /**
  * Middleware para verificar roles específicos
+ * 
+ * Roles disponibles (de mayor a menor privilegio):
+ * - admin: Acceso total (gestión de usuarios, configuraciones, pedidos)
+ * - supervisor: Gestión de pedidos y clientes, NO puede configurar ni crear usuarios
+ * - editor: Crear/editar pedidos y clientes
+ * - viewer: Solo lectura
+ * 
  * @param {string|string[]} allowedRoles - Roles permitidos
  */
 export function requireRole(allowedRoles) {
@@ -63,6 +70,46 @@ export function requireRole(allowedRoles) {
 
     next();
   };
+}
+
+/**
+ * Middleware para verificar si el usuario tiene al menos uno de los roles especificados
+ * Útil para endpoints que requieren supervisor O admin
+ * 
+ * @param {string[]} allowedRoles - Array de roles permitidos
+ */
+export function requireAnyRole(allowedRoles) {
+  return requireRole(allowedRoles);
+}
+
+/**
+ * Verifica si un usuario puede gestionar otros usuarios
+ * Solo admins pueden crear/editar/eliminar usuarios
+ * 
+ * @returns {Function} Middleware
+ */
+export function requireUserManagement() {
+  return requireRole('admin');
+}
+
+/**
+ * Verifica si un usuario puede gestionar configuraciones
+ * Solo admins pueden modificar configuraciones del sistema
+ * 
+ * @returns {Function} Middleware
+ */
+export function requireConfigManagement() {
+  return requireRole('admin');
+}
+
+/**
+ * Verifica si un usuario puede gestionar pedidos
+ * Admins, supervisores y editores pueden gestionar pedidos
+ * 
+ * @returns {Function} Middleware
+ */
+export function requireOrderManagement() {
+  return requireRole(['admin', 'supervisor', 'editor']);
 }
 
 /**

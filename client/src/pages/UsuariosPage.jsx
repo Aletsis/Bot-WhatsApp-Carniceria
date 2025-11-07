@@ -93,10 +93,19 @@ export default function UsuariosPage() {
   const getRolBadge = (rol) => {
     const variants = {
       admin: 'danger',
-      editor: 'warning',
+      supervisor: 'warning',
+      editor: 'success',
       viewer: 'info',
     };
-    return <Badge variant={variants[rol]}>{rol.toUpperCase()}</Badge>;
+    
+    const labels = {
+      admin: 'ADMIN',
+      supervisor: 'SUPERVISOR',
+      editor: 'EDITOR',
+      viewer: 'VIEWER',
+    };
+    
+    return <Badge variant={variants[rol] || 'default'}>{labels[rol] || rol.toUpperCase()}</Badge>;
   };
 
   return (
@@ -355,8 +364,9 @@ export default function UsuariosPage() {
                 onChange={(e) => setFormData({ ...formData, rol: e.target.value })}
                 options={[
                   { value: 'viewer', label: 'Visualizador (Solo Lectura)' },
-                  { value: 'editor', label: 'Editor (Lectura y Escritura)' },
-                  { value: 'admin', label: 'Administrador (Control Total)' },
+                  { value: 'editor', label: 'Editor (Crear/Editar Pedidos y Clientes)' },
+                  { value: 'supervisor', label: 'Supervisor (Gestión Completa de Pedidos, Sin Config)' },
+                  { value: 'admin', label: 'Administrador (Control Total del Sistema)' },
                 ]}
               />
             </>
