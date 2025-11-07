@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout';
 import { Button, Input, Card, Loading, Modal, Badge } from '../components/common';
 import { clientesService } from '../api/services';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ClientesPage() {
+  const { canEdit, getDefaultPage } = useAuth();
+
+  // Si no puede editar, redirigir a su página por defecto
+  if (!canEdit) {
+    return <Navigate to={getDefaultPage()} replace />;
+  }
   const [clientes, setClientes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -15,7 +22,6 @@ export default function ClientesPage() {
     nombre: '',
     direccion: '',
   });
-  const { isEditor } = useAuth();
 
   useEffect(() => {
     loadClientes();
@@ -89,7 +95,7 @@ export default function ClientesPage() {
             <Button variant="primary" onClick={() => loadClientes()} size="sm" className="flex-1 sm:flex-none">
               🔄 <span className="hidden sm:inline">Actualizar</span>
             </Button>
-            {isEditor && (
+            {canEdit && (
               <Button variant="success" onClick={openCreateModal} size="sm" className="flex-1 sm:flex-none">
                 ➕ <span className="hidden sm:inline">Nuevo Cliente</span><span className="sm:hidden">Nuevo</span>
               </Button>
@@ -145,7 +151,7 @@ export default function ClientesPage() {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Fecha Alta
                       </th>
-                      {isEditor && (
+                      {canEdit && (
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
                           Acciones
                         </th>
@@ -172,7 +178,7 @@ export default function ClientesPage() {
                         <td className="px-4 py-3 text-sm text-gray-600">
                           {new Date(cliente.FechaAlta).toLocaleDateString('es-MX')}
                         </td>
-                        {isEditor && (
+                        {canEdit && (
                           <td className="px-4 py-3 text-sm text-right space-x-2">
                             <Button
                               variant="outline"
@@ -225,11 +231,11 @@ export default function ClientesPage() {
                     </p>
                   )}
                   
-                  <p className="text-xs text-gray-500 mb-3">
+                  <p className="text-sm text-gray-600 mb-1">
                     <strong>Fecha Alta:</strong> {new Date(cliente.FechaAlta).toLocaleDateString('es-MX')}
                   </p>
 
-                  {isEditor && (
+                  {canEdit && (
                     <div className="flex gap-2 pt-2 border-t">
                       <Button
                         variant="outline"

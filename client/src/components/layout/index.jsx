@@ -48,31 +48,45 @@ export const Navbar = ({ onMenuClick }) => {
 
 export const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, canEdit, canViewAll } = useAuth();
 
-  const menuItems = [
-    {
+  const menuItems = [];
+
+  // Historial Chats - Todos los usuarios autenticados pueden ver
+  menuItems.push({
+    name: 'Historial Chats',
+    path: '/dashboard/chats',
+    icon: '�',
+  });
+
+  // Pedidos - Solo admin, supervisor, editor
+  if (canEdit) {
+    menuItems.push({
       name: 'Pedidos',
       path: '/dashboard/pedidos',
-      icon: '📦',
-    },
-    {
+      icon: '�',
+    });
+  }
+
+  // Clientes - Solo admin, supervisor, editor
+  if (canEdit) {
+    menuItems.push({
       name: 'Clientes',
       path: '/dashboard/clientes',
-      icon: '👥',
-    },
-    {
+      icon: '�',
+    });
+  }
+
+  // Conversaciones - Solo admin, supervisor
+  if (canViewAll) {
+    menuItems.push({
       name: 'Conversaciones',
       path: '/dashboard/conversaciones',
-      icon: '💬',
-    },
-    {
-      name: 'Historial Chats',
-      path: '/dashboard/chats',
-      icon: '📱',
-    },
-  ];
+      icon: '�',
+    });
+  }
 
+  // Usuarios - Solo admin
   if (isAdmin) {
     menuItems.push({
       name: 'Usuarios',

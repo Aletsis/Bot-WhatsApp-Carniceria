@@ -8,11 +8,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, isAuthenticated } = useAuth();
+  const { login, isAuthenticated, getDefaultPage } = useAuth();
 
-  // Si ya está autenticado, redirigir al dashboard
+  // Si ya está autenticado, redirigir a su página por defecto
   if (isAuthenticated) {
-    return <Navigate to="/dashboard/pedidos" replace />;
+    return <Navigate to={getDefaultPage()} replace />;
   }
 
   const handleSubmit = async (e) => {

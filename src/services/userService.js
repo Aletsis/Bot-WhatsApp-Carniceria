@@ -45,7 +45,7 @@ export async function getUserById(userId) {
 export async function getAllUsers() {
   const pool = await getPool();
   const result = await pool.request()
-    .query(`SELECT UsuarioID, Username, Rol, Nombre, Email, Activo, 
+    .query(`SELECT UsuarioID, Username, Rol, Nombre, Email, NumeroWhatsApp, Activo, 
             FechaCreacion, UltimoAcceso 
             FROM Usuarios 
             ORDER BY FechaCreacion DESC`);
@@ -116,7 +116,7 @@ export async function authenticateUser(username, password) {
  */
 export async function createUser({ username, password, rol, nombre, email, creadoPor }) {
   // Validar rol
-  const rolesValidos = ['admin', 'editor', 'viewer'];
+  const rolesValidos = ['admin', 'supervisor', 'editor', 'viewer'];
   if (!rolesValidos.includes(rol)) {
     throw new Error(`Rol inválido: ${rol}. Debe ser: ${rolesValidos.join(', ')}`);
   }
@@ -178,18 +178,32 @@ export async function deactivateUser(userId) {
 }
 
 /**
- * Reactiva un usuario
+ * Actualiza información de un usuario (nombre, email, numeroWhatsApp)
  * @param {number} userId - ID del usuario
+ * @param {Object} info - Información a actualizar
+ * @param {string} [info.nombre] - Nombre del usuario
+ * @param {string} [info.email] - Email del usuario
+ * @param {string} [info.numeroWhatsApp] - Número de WhatsApp
  * @returns {Promise<number>} Número de filas afectadas
  * @throws {Error} Si hay un error de BD
  */
-export async function activateUser(userId) {
+export async function updateUserInfo(userId, info) {
   const pool = await getPool();
+  
   const result = await pool.request()
     .input('userId', sql.Int, userId)
-    .query('UPDATE Usuarios SET Activo = 1 WHERE UsuarioID = @userId');
+    .input('nombre', sql.NVarChar, info.nombre)
+    .input('email', sql.NVarChar, info.email)
+    .input('numeroWhatsApp', sql.NVarChar, info.numeroWhatsApp)
+    .query(`
+      UPDATE Usuarios 
+      SET Nombre = @nombre,
+          Email = @email,
+          NumeroWhatsApp = @numeroWhatsApp
+      WHERE UsuarioID = @userId
+    `);
 
-  logger.info('✅ Usuario reactivado ID: %d', userId);
+  logger.info('✅ Información actualizada para usuario ID: %d', userId);
   return result.rowsAffected[0];
 }
 

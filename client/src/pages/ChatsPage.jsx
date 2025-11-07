@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { DashboardLayout } from '../components/layout';
 import api from '../api/axios';
 import './ChatsPage.css';
 
@@ -11,27 +12,73 @@ export default function ChatsPage() {
   const [selectedPhone, setSelectedPhone] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchMode, setSearchMode] = useState('conversations'); // 'conversations' o 'messages'
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [showMessages, setShowMessages] = useState(false); // Para navegación móvil
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [messagesOffset, setMessagesOffset] = useState(0);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
   // Cargar lista de conversaciones al montar
   useEffect(() => {
     loadConversations();
   }, []);
 
-  // Auto-scroll cuando cambian los mensajes
+  // Auto-scroll al final cuando se cargan mensajes iniciales
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    if (messages.length > 0 && !loadingOlder) {
+      // Solo scroll automático para la carga inicial (primera vez)
+      if (messagesOffset <= 50) {
+        setTimeout(() => scrollToBottom(), 100);
+      }
+    }
+  }, [messages.length, loadingOlder, messagesOffset]);
 
   // Resetear estado de envío cuando se cambia de conversación
   useEffect(() => {
     setNewMessage('');
     setSending(false);
   }, [selectedPhone]);
+
+  // Manejar redimensión de pantalla
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768 && showMessages) {
+        // En pantalla grande, mostrar ambas vistas
+        setShowMessages(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [showMessages]);
+
+  // Detector de scroll para cargar mensajes antiguos y mostrar botón de scroll
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      
+      // Si el usuario hace scroll hasta arriba (o cerca), cargar más mensajes
+      if (scrollTop <= 100 && hasMoreMessages && !loadingOlder) {
+        loadOlderMessages();
+      }
+      
+      // Mostrar botón de scroll hacia abajo si no está en el final
+      const isNearBottom = scrollTop + clientHeight >= scrollHeight - 100;
+      setShowScrollToBottom(!isNearBottom && messages.length > 0);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [selectedPhone, hasMoreMessages, loadingOlder, messages.length]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -59,20 +106,38 @@ export default function ChatsPage() {
   };
 
   /**
-   * Carga el historial de mensajes de un cliente
+   * Carga el historial de mensajes más recientes de un cliente
    */
-  const loadMessages = async (telefono) => {
+  const loadMessages = async (telefono, resetMessages = true) => {
     try {
       setLoading(true);
       setSelectedPhone(telefono);
+      setShowMessages(true); // Mostrar vista de mensajes en móvil
+      
+      if (resetMessages) {
+        setMessages([]);
+        setMessagesOffset(0);
+        setHasMoreMessages(true);
+      }
       
       const response = await api.get(`/dashboard/chats/${telefono}`, {
-        params: { limit: 100, offset: 0 }
+        params: { 
+          limit: 50, // Cargar menos mensajes inicialmente
+          offset: 0 
+        }
       });
       
       if (response.data.success) {
-        // Invertir para mostrar más antiguos primero
-        setMessages(response.data.messages.reverse());
+        // Los mensajes vienen ordenados por fecha DESC, los revertimos para mostrar cronológicamente
+        const rawMessages = response.data.messages || [];
+        // Eliminar duplicados por MensajeID
+        const uniqueMessages = rawMessages.filter((msg, index, self) => 
+          index === self.findIndex(m => m.MensajeID === msg.MensajeID)
+        );
+        const newMessages = uniqueMessages.reverse();
+        setMessages(newMessages);
+        setMessagesOffset(newMessages.length);
+        setHasMoreMessages(newMessages.length === 50); // Si vienen menos de 50, no hay más
         
         // Marcar como leídos
         await api.post(`/dashboard/chats/${telefono}/mark-read`);
@@ -85,6 +150,62 @@ export default function ChatsPage() {
       alert('Error al cargar mensajes');
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Carga mensajes más antiguos (scroll hacia arriba)
+   */
+  const loadOlderMessages = async () => {
+    if (!selectedPhone || !hasMoreMessages || loadingOlder) return;
+
+    try {
+      setLoadingOlder(true);
+      
+      const response = await api.get(`/dashboard/chats/${selectedPhone}`, {
+        params: { 
+          limit: 50,
+          offset: messagesOffset 
+        }
+      });
+      
+      if (response.data.success) {
+        const rawOlderMessages = response.data.messages || [];
+        // Eliminar duplicados por MensajeID
+        const uniqueOlderMessages = rawOlderMessages.filter((msg, index, self) => 
+          index === self.findIndex(m => m.MensajeID === msg.MensajeID)
+        );
+        const olderMessages = uniqueOlderMessages.reverse(); // Revertir para orden cronológico
+        
+        if (olderMessages.length > 0) {
+          // Guardar posición actual del scroll
+          const container = messagesContainerRef.current;
+          const scrollHeight = container?.scrollHeight || 0;
+          
+          // Evitar duplicados al combinar con mensajes existentes
+          setMessages(prev => {
+            const existingIds = new Set(prev.map(m => m.MensajeID));
+            const newUniqueMessages = olderMessages.filter(m => !existingIds.has(m.MensajeID));
+            return [...newUniqueMessages, ...prev];
+          });
+          setMessagesOffset(prev => prev + olderMessages.length);
+          setHasMoreMessages(olderMessages.length === 50);
+          
+          // Restaurar posición de scroll después de que React re-renderice
+          setTimeout(() => {
+            if (container) {
+              const newScrollHeight = container.scrollHeight;
+              container.scrollTop = newScrollHeight - scrollHeight;
+            }
+          }, 0);
+        } else {
+          setHasMoreMessages(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando mensajes antiguos:', error);
+    } finally {
+      setLoadingOlder(false);
     }
   };
 
@@ -142,7 +263,28 @@ export default function ChatsPage() {
     setSearchTerm('');
     setMessages([]);
     setSelectedPhone(null);
+    setShowMessages(false);
+    setMessagesOffset(0);
+    setHasMoreMessages(true);
     loadConversations();
+  };
+
+  /**
+   * Vuelve a la lista de conversaciones (navegación móvil)
+   */
+  const goBackToConversations = () => {
+    setShowMessages(false);
+    setSelectedPhone(null);
+    setMessages([]);
+    setMessagesOffset(0);
+    setHasMoreMessages(true);
+  };
+
+  /**
+   * Detecta si estamos en dispositivo móvil
+   */
+  const isMobile = () => {
+    return window.innerWidth <= 768;
   };
 
   /**
@@ -263,9 +405,10 @@ export default function ChatsPage() {
   };
 
   return (
-    <div className="chats-page">
-      <div className="chats-header">
-        <h1>💬 Historial de Chats</h1>
+    <DashboardLayout>
+      <div className="chats-page">
+        <div className="chats-header">
+          <h1>💬 Historial de Chats</h1>
 
         <form onSubmit={handleSearch} className="search-form">
           <div className="search-input-group">
@@ -317,7 +460,7 @@ export default function ChatsPage() {
 
       <div className="chats-container">
         {/* Lista de conversaciones */}
-        <div className="conversations-list">
+        <div className={`conversations-list ${showMessages && isMobile() ? 'hidden-mobile' : ''}`}>
           <h2>Conversaciones</h2>
           
           {loading && !selectedPhone ? (
@@ -363,7 +506,7 @@ export default function ChatsPage() {
         </div>
 
         {/* Área de mensajes */}
-        <div className="messages-area">
+        <div className={`messages-area ${showMessages ? 'active' : ''}`}>
           {!selectedPhone && messages.length === 0 ? (
             <div className="empty-chat">
               <div className="empty-icon">💬</div>
@@ -371,7 +514,7 @@ export default function ChatsPage() {
             </div>
           ) : (
             <>
-              <div className="messages-header">
+              <div className="messages-header" onClick={isMobile() ? goBackToConversations : undefined}>
                 <h2>
                   {selectedPhone
                     ? conversations.find(c => c.NumeroTelefono === selectedPhone)?.NombreCliente || selectedPhone
@@ -388,16 +531,31 @@ export default function ChatsPage() {
                 )}
               </div>
 
-              <div className="messages-container">
+              <div className="messages-container" ref={messagesContainerRef}>
                 {loading ? (
                   <div className="loading">Cargando mensajes...</div>
                 ) : messages.length === 0 ? (
                   <div className="empty-messages">No hay mensajes</div>
                 ) : (
                   <>
-                    {messages.map((msg) => (
+                    {/* Indicador de carga para mensajes antiguos */}
+                    {loadingOlder && (
+                      <div className="loading-older">
+                        <div className="loading-spinner">⏳</div>
+                        <span>Cargando mensajes anteriores...</span>
+                      </div>
+                    )}
+                    
+                    {/* Indicador de que no hay más mensajes */}
+                    {!hasMoreMessages && messages.length > 0 && (
+                      <div className="no-more-messages">
+                        📜 Inicio de la conversación
+                      </div>
+                    )}
+                    
+                    {messages.map((msg, index) => (
                       <div
-                        key={msg.MensajeID}
+                        key={`${msg.MensajeID}-${index}`}
                         className={`message ${msg.Tipo === 'enviado' ? 'sent' : 'received'}`}
                       >
                         <div className="message-bubble">
@@ -421,6 +579,17 @@ export default function ChatsPage() {
                     ))}
                     <div ref={messagesEndRef} />
                   </>
+                )}
+                
+                {/* Botón de scroll hacia abajo */}
+                {showScrollToBottom && (
+                  <button 
+                    className="scroll-to-bottom-btn"
+                    onClick={scrollToBottom}
+                    title="Ir a los mensajes más recientes"
+                  >
+                    ↓
+                  </button>
                 )}
               </div>
 
@@ -458,5 +627,6 @@ export default function ChatsPage() {
         </div>
       </div>
     </div>
+    </DashboardLayout>
   );
 }

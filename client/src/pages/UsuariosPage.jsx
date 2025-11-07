@@ -17,12 +17,13 @@ export default function UsuariosPage() {
     rol: 'viewer',
     nombre: '',
     email: '',
+    numeroWhatsApp: '',
   });
-  const { isAdmin } = useAuth();
+  const { isAdmin, getDefaultPage } = useAuth();
 
-  // Si no es admin, redirigir
+  // Si no es admin, redirigir a su página por defecto
   if (!isAdmin) {
-    return <Navigate to="/dashboard/pedidos" replace />;
+    return <Navigate to={getDefaultPage()} replace />;
   }
 
   useEffect(() => {
@@ -49,6 +50,19 @@ export default function UsuariosPage() {
       rol: 'viewer',
       nombre: '',
       email: '',
+      numeroWhatsApp: '',
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (usuario) => {
+    setModalMode('edit');
+    setSelectedUsuario(usuario);
+    setFormData({
+      ...formData,
+      nombre: usuario.Nombre || '',
+      email: usuario.Email || '',
+      numeroWhatsApp: usuario.NumeroWhatsApp || '',
     });
     setShowModal(true);
   };
@@ -66,6 +80,13 @@ export default function UsuariosPage() {
       if (modalMode === 'create') {
         await usuariosService.create(formData);
         alert('Usuario creado exitosamente');
+      } else if (modalMode === 'edit') {
+        await usuariosService.updateInfo(selectedUsuario.UsuarioID, {
+          nombre: formData.nombre,
+          email: formData.email,
+          numeroWhatsApp: formData.numeroWhatsApp,
+        });
+        alert('Información actualizada exitosamente');
       } else if (modalMode === 'password') {
         await usuariosService.updatePassword(
           selectedUsuario.UsuarioID,
@@ -76,17 +97,21 @@ export default function UsuariosPage() {
       setShowModal(false);
       loadUsuarios();
     } catch (error) {
-      alert('Error al guardar usuario');
+      alert('Error al guardar usuario: ' + (error.response?.data?.error || error.message));
     }
   };
 
   const handleToggleEstado = async (usuarioId, activo) => {
+    if (!confirm(`¿Estás seguro de ${activo ? 'desactivar' : 'activar'} este usuario?`)) {
+      return;
+    }
+    
     try {
       await usuariosService.updateEstado(usuarioId, !activo);
       alert('Estado actualizado exitosamente');
       loadUsuarios();
     } catch (error) {
-      alert('Error al actualizar estado');
+      alert('Error al actualizar estado: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -173,6 +198,9 @@ export default function UsuariosPage() {
                         Email
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        WhatsApp
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                         Rol
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -198,6 +226,15 @@ export default function UsuariosPage() {
                         <td className="px-4 py-3 text-sm text-gray-600">
                           {usuario.Email || '-'}
                         </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {usuario.NumeroWhatsApp ? (
+                            <span className="inline-flex items-center gap-1">
+                              📱 {usuario.NumeroWhatsApp}
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">Sin configurar</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-sm">{getRolBadge(usuario.Rol)}</td>
                         <td className="px-4 py-3 text-sm">
                           <Badge variant={usuario.Activo ? 'success' : 'default'}>
@@ -213,9 +250,16 @@ export default function UsuariosPage() {
                           <Button
                             variant="outline"
                             size="sm"
+                            onClick={() => openEditModal(usuario)}
+                          >
+                            ✏️ Editar Info
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
                             onClick={() => openPasswordModal(usuario)}
                           >
-                            🔑 Cambiar Contraseña
+                            🔑 Contraseña
                           </Button>
                           <Button
                             variant={usuario.Activo ? 'danger' : 'success'}
@@ -251,6 +295,11 @@ export default function UsuariosPage() {
                           ✉️ {usuario.Email}
                         </p>
                       )}
+                      {usuario.NumeroWhatsApp && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          📱 {usuario.NumeroWhatsApp}
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-col gap-2 items-end">
                       {getRolBadge(usuario.Rol)}
@@ -270,22 +319,32 @@ export default function UsuariosPage() {
                       : 'Nunca'}
                   </p>
 
-                  <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openPasswordModal(usuario)}
-                      className="flex-1"
-                    >
-                      🔑 Cambiar Contraseña
-                    </Button>
+                  <div className="flex flex-col gap-2 pt-2 border-t">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditModal(usuario)}
+                        className="flex-1"
+                      >
+                        ✏️ Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openPasswordModal(usuario)}
+                        className="flex-1"
+                      >
+                        🔑 Contraseña
+                      </Button>
+                    </div>
                     <Button
                       variant={usuario.Activo ? 'danger' : 'success'}
                       size="sm"
                       onClick={() =>
                         handleToggleEstado(usuario.UsuarioID, usuario.Activo)
                       }
-                      className="flex-1"
+                      className="w-full"
                     >
                       {usuario.Activo ? '❌ Desactivar' : '✅ Activar'}
                     </Button>
@@ -304,6 +363,8 @@ export default function UsuariosPage() {
         title={
           modalMode === 'create'
             ? 'Nuevo Usuario'
+            : modalMode === 'edit'
+            ? `Editar Usuario: ${selectedUsuario?.Username}`
             : `Cambiar Contraseña: ${selectedUsuario?.Username}`
         }
         footer={
@@ -312,7 +373,7 @@ export default function UsuariosPage() {
               Cancelar
             </Button>
             <Button variant="primary" onClick={handleSubmit} size="sm" className="flex-1 sm:flex-none">
-              {modalMode === 'create' ? 'Crear' : 'Guardar'}
+              {modalMode === 'create' ? 'Crear' : modalMode === 'edit' ? 'Actualizar' : 'Guardar'}
             </Button>
           </div>
         }
@@ -358,6 +419,16 @@ export default function UsuariosPage() {
                 }
                 placeholder="email@ejemplo.com"
               />
+              <Input
+                label="WhatsApp (opcional)"
+                type="text"
+                value={formData.numeroWhatsApp}
+                onChange={(e) =>
+                  setFormData({ ...formData, numeroWhatsApp: e.target.value })
+                }
+                placeholder="+5214447320220"
+                help="Número completo con código de país para recibir notificaciones"
+              />
               <Select
                 label="Rol"
                 value={formData.rol}
@@ -368,6 +439,37 @@ export default function UsuariosPage() {
                   { value: 'supervisor', label: 'Supervisor (Gestión Completa de Pedidos, Sin Config)' },
                   { value: 'admin', label: 'Administrador (Control Total del Sistema)' },
                 ]}
+              />
+            </>
+          ) : modalMode === 'edit' ? (
+            <>
+              <Input
+                label="Nombre"
+                type="text"
+                value={formData.nombre}
+                onChange={(e) =>
+                  setFormData({ ...formData, nombre: e.target.value })
+                }
+                placeholder="Nombre completo"
+              />
+              <Input
+                label="Email"
+                type="email"
+                value={formData.email}
+                onChange={(e) =>
+                  setFormData({ ...formData, email: e.target.value })
+                }
+                placeholder="email@ejemplo.com"
+              />
+              <Input
+                label="WhatsApp"
+                type="text"
+                value={formData.numeroWhatsApp}
+                onChange={(e) =>
+                  setFormData({ ...formData, numeroWhatsApp: e.target.value })
+                }
+                placeholder="+5214447320220"
+                help="Número completo con código de país para recibir notificaciones. Dejar vacío para no recibir notificaciones."
               />
             </>
           ) : (

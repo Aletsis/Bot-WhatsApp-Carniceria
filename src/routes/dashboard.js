@@ -43,6 +43,7 @@ router.post('/chats/:telefono/send', dashboardController.sendMessageToClient);
 // API endpoints - Usuarios (solo para admins)
 router.get('/usuarios', requireRole('admin'), dashboardController.getUsuarios);
 router.post('/usuarios', requireRole('admin'), dashboardController.createUsuario);
+router.put('/usuarios/:usuarioId/info', requireRole('admin'), dashboardController.updateUsuarioInfo);
 router.put('/usuarios/:usuarioId/password', requireRole('admin'), dashboardController.cambiarPassword);
 router.put('/usuarios/:usuarioId/estado', requireRole('admin'), dashboardController.toggleUsuario);
 

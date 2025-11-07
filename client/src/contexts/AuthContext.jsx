@@ -64,6 +64,19 @@ export const AuthProvider = ({ children }) => {
     canManageOrders: ['admin', 'supervisor', 'editor'].includes(user?.Rol), // Admin, supervisor o editor
     canViewAll: ['admin', 'supervisor'].includes(user?.Rol), // Admin o supervisor
     canEdit: ['admin', 'supervisor', 'editor'].includes(user?.Rol), // Admin, supervisor o editor
+    // Función para obtener la página por defecto según el rol
+    getDefaultPage: () => {
+      if (!user?.Rol) return '/dashboard/pedidos';
+      switch (user.Rol) {
+        case 'viewer':
+          return '/dashboard/chats'; // Solo pueden ver chats
+        case 'editor':
+        case 'supervisor':
+        case 'admin':
+        default:
+          return '/dashboard/pedidos'; // Pueden gestionar pedidos
+      }
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import DefaultRedirect from './components/DefaultRedirect';
 import LoginPage from './pages/LoginPage';
 import PedidosPage from './pages/PedidosPage';
 import ClientesPage from './pages/ClientesPage';
@@ -20,7 +21,11 @@ function App() {
           {/* Rutas protegidas */}
           <Route
             path="/dashboard"
-            element={<Navigate to="/dashboard/pedidos" replace />}
+            element={
+              <ProtectedRoute>
+                <DefaultRedirect />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/dashboard/pedidos"

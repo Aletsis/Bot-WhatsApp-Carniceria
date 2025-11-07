@@ -152,8 +152,15 @@ if (isProduction) {
 }
 
 const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-    logger.info('✅ Servidor corriendo en http://localhost:%s', PORT);
+const HOST = process.env.NODE_ENV === 'development' ? '0.0.0.0' : 'localhost';
+
+const server = app.listen(PORT, HOST, () => {
+    if (HOST === '0.0.0.0') {
+        logger.info('✅ Servidor corriendo en http://localhost:%s', PORT);
+        logger.info('🌐 Accesible en red local en http://<tu-ip-local>:%s', PORT);
+    } else {
+        logger.info('✅ Servidor corriendo en http://localhost:%s', PORT);
+    }
 });
 
 // Inicializar base de datos

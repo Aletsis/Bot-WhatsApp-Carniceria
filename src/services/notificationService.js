@@ -8,21 +8,56 @@
  * - Configuración desde BD
  * - Manejo de errores sin interrumpir flujo principal
  * 
- * Tipos de Error Soportados:
- * - PRINTING_ERROR: Error de impresión individual
- * - PRINTING_RECURRING: 3+ errores de impresión en ventana de tiempo
- * - WHATSAPP_API_ERROR: Error al enviar mensaje por WhatsApp API
- * - DATABASE_ERROR: Error de conexión a base de datos
- * - WEBHOOK_INVALID: Webhook con firma inválida
- * - ORDER_NOT_PRINTED: Pedido sin imprimir por X minutos
+ * TIPOS DE NOTIFICACIONES:
+ * 
+ * 1. NOTIFICACIONES DE SISTEMA (Solo Admin):
+ *    - PRINTING_ERROR: Error de impresión individual
+ *    - PRINTING_RECURRING: 3+ errores de impresión en ventana de tiempo
+ *    - WHATSAPP_API_ERROR: Error al enviar mensaje por WhatsApp API
+ *    - DATABASE_ERROR: Error de conexión a base de datos
+ *    - WEBHOOK_INVALID: Webhook con firma inválida
+ * 
+ * 2. NOTIFICACIONES OPERATIVAS (Admin + Supervisor):
+ *    - ORDER_NOT_PRINTED: Pedido sin imprimir por X minutos
+ *    - PRINTING_DELAYED: Pedido con demoras en impresión
  * 
  * @module notificationService
  */
 
 import sql from 'mssql';
-import dbService from './dbService.js';
+import { getPool } from './dbService.js';
 import * as configService from './configService.js';
 import logger from '../logger.js';
+
+// ============================================
+// CONSTANTES DE TIPOS DE NOTIFICACIONES
+// ============================================
+
+/**
+ * Notificaciones de sistema - Solo para administradores
+ * Incluye errores técnicos y problemas del sistema
+ */
+const SYSTEM_NOTIFICATIONS = [
+  'PRINTING_ERROR',
+  'PRINTING_RECURRING', 
+  'WHATSAPP_API_ERROR',
+  'DATABASE_ERROR',
+  'WEBHOOK_INVALID'
+];
+
+/**
+ * Notificaciones operativas - Para administradores y supervisores
+ * Incluye alertas relacionadas con operaciones diarias
+ */
+const OPERATIONAL_NOTIFICATIONS = [
+  'ORDER_NOT_PRINTED',
+  'PRINTING_DELAYED'
+];
+
+/**
+ * Todos los tipos de notificaciones válidos
+ */
+const ALL_NOTIFICATION_TYPES = [...SYSTEM_NOTIFICATIONS, ...OPERATIONAL_NOTIFICATIONS];
 
 // Cache en memoria para throttling
 // Estructura: { [tipoError]: { ultimaNotificacion: timestamp, contador: number } }
@@ -77,41 +112,87 @@ async function loadConfig() {
 }
 
 /**
- * Obtiene los números de WhatsApp de todos los administradores activos
- * @returns {Promise<Array<string>>} Array de números de WhatsApp
+ * Obtiene los números de WhatsApp según el tipo de notificación
+ * @param {string} notificationType - Tipo de notificación 
+ * @returns {Promise<Array<Object>>} Array de usuarios con sus datos
  */
-async function getAdminPhoneNumbers() {
+async function getRecipientPhoneNumbers(notificationType) {
   try {
-    const pool = await dbService.getConnection();
+    const pool = await getPool();
     
-    const result = await pool.request().query(`
+    // Determinar roles permitidos según el tipo de notificación
+    let allowedRoles;
+    if (SYSTEM_NOTIFICATIONS.includes(notificationType)) {
+      // Solo administradores para notificaciones de sistema
+      allowedRoles = ['admin'];
+    } else if (OPERATIONAL_NOTIFICATIONS.includes(notificationType)) {
+      // Administradores y supervisores para notificaciones operativas
+      allowedRoles = ['admin', 'supervisor'];
+    } else {
+      logger.warn('[Notifications] Tipo de notificación desconocido: %s', notificationType);
+      allowedRoles = ['admin']; // Fallback a solo admin
+    }
+    
+    // Construir la condición WHERE dinámicamente
+    const rolePlaceholders = allowedRoles.map((_, index) => `@rol${index}`).join(', ');
+    
+    const request = pool.request();
+    allowedRoles.forEach((rol, index) => {
+      request.input(`rol${index}`, sql.NVarChar, rol);
+    });
+    
+    const result = await request.query(`
       SELECT 
         UsuarioID,
         Username,
+        Rol,
         NumeroWhatsApp
       FROM dbo.Usuarios
-      WHERE Rol = 'admin' 
+      WHERE Rol IN (${rolePlaceholders})
         AND Activo = 1
         AND NumeroWhatsApp IS NOT NULL
         AND LEN(RTRIM(NumeroWhatsApp)) > 0
-      ORDER BY UsuarioID
+      ORDER BY 
+        CASE Rol 
+          WHEN 'admin' THEN 1 
+          WHEN 'supervisor' THEN 2 
+          ELSE 3 
+        END,
+        UsuarioID
     `);
     
-    const phoneNumbers = result.recordset.map(admin => ({
-      usuarioID: admin.UsuarioID,
-      username: admin.Username,
-      phone: admin.NumeroWhatsApp
+    const recipients = result.recordset.map(user => ({
+      usuarioID: user.UsuarioID,
+      username: user.Username,
+      rol: user.Rol,
+      phone: user.NumeroWhatsApp
     }));
     
-    if (phoneNumbers.length === 0) {
-      logger.warn('[Notifications] ⚠️  No hay administradores con número de WhatsApp configurado');
+    if (recipients.length === 0) {
+      logger.warn('[Notifications] ⚠️  No hay usuarios (%s) con WhatsApp para tipo: %s', 
+        allowedRoles.join(', '), notificationType);
+    } else {
+      logger.debug('[Notifications] 📱 %d destinatarios encontrados para %s: %s', 
+        recipients.length, 
+        notificationType,
+        recipients.map(r => `${r.username}(${r.rol})`).join(', ')
+      );
     }
     
-    return phoneNumbers;
+    return recipients;
   } catch (error) {
-    logger.error('[Notifications] Error obteniendo números de admins:', error.message);
+    logger.error('[Notifications] Error obteniendo destinatarios para %s:', notificationType, error.message);
     return [];
   }
+}
+
+/**
+ * Función de compatibilidad - obtiene solo administradores
+ * @deprecated Usar getRecipientPhoneNumbers() con tipo específico
+ * @returns {Promise<Array<Object>>} Array de administradores
+ */
+async function getAdminPhoneNumbers() {
+  return await getRecipientPhoneNumbers('SYSTEM_NOTIFICATION_FALLBACK');
 }
 
 /**
@@ -173,7 +254,7 @@ async function shouldNotify(tipoError) {
  */
 async function logNotification(tipoError, severidad, mensaje, destinatarios, estado, whatsappMessageID = null, metadata = null, errorMensaje = null) {
   try {
-    const pool = await dbService.getConnection();
+    const pool = await getPool();
     
     const result = await pool.request()
       .input('tipoError', sql.NVarChar(50), tipoError)
@@ -224,6 +305,13 @@ export async function notifyAdmins(tipoError, mensaje, options = {}) {
   } = options;
   
   try {
+    // Validar tipo de notificación
+    if (!ALL_NOTIFICATION_TYPES.includes(tipoError)) {
+      logger.warn('[Notifications] ⚠️  Tipo de notificación no válido: %s', tipoError);
+      // Fallback a notificación de sistema
+      tipoError = 'SYSTEM_ERROR';
+    }
+    
     // Verificar throttling (a menos que sea forzado)
     if (!forceNotify) {
       const should = await shouldNotify(tipoError);
@@ -234,12 +322,15 @@ export async function notifyAdmins(tipoError, mensaje, options = {}) {
       }
     }
     
-    // Obtener números de administradores
-    const admins = await getAdminPhoneNumbers();
+    // Obtener destinatarios según el tipo de notificación
+    const recipients = await getRecipientPhoneNumbers(tipoError);
     
-    if (admins.length === 0) {
-      logger.warn('[Notifications] ⚠️  No se puede enviar notificación: no hay admins con WhatsApp');
-      await logNotification(tipoError, severidad, mensaje, [], 'ERROR', null, metadata, 'No hay administradores con WhatsApp configurado');
+    if (recipients.length === 0) {
+      const requiredRoles = SYSTEM_NOTIFICATIONS.includes(tipoError) ? 'admin' : 'admin/supervisor';
+      logger.warn('[Notifications] ⚠️  No se puede enviar notificación tipo %s: no hay usuarios %s con WhatsApp', 
+        tipoError, requiredRoles);
+      await logNotification(tipoError, severidad, mensaje, [], 'ERROR', null, metadata, 
+        `No hay usuarios ${requiredRoles} con WhatsApp configurado`);
       return false;
     }
     
@@ -258,40 +349,36 @@ export async function notifyAdmins(tipoError, mensaje, options = {}) {
       `*Detalle:*\n${mensaje}`;
     
     // Importar whatsappService dinámicamente para evitar dependencia circular
-    const { apiSend } = await import('./whatsappService.js');
+    const whatsappService = await import('./whatsappService.js');
     
-    // Enviar a cada administrador
+    // Enviar a cada destinatario
     const results = [];
-    const phoneNumbers = admins.map(a => a.phone);
+    const phoneNumbers = recipients.map(r => r.phone);
     
-    for (const admin of admins) {
+    for (const recipient of recipients) {
       try {
-        const payload = {
-          messaging_product: 'whatsapp',
-          to: admin.phone,
-          type: 'text',
-          text: { body: formattedMessage }
-        };
-        
-        const response = await apiSend(payload);
+        const response = await whatsappService.default.sendText(recipient.phone, formattedMessage);
         
         results.push({
-          admin: admin.username,
-          phone: admin.phone,
+          username: recipient.username,
+          rol: recipient.rol,
+          phone: recipient.phone,
           success: true,
           messageId: response.messages?.[0]?.id
         });
         
-        logger.info('[Notifications] ✅ Notificación enviada a %s (%s)', admin.username, admin.phone);
+        logger.info('[Notifications] ✅ Notificación %s enviada a %s (%s) - %s', 
+          tipoError, recipient.username, recipient.rol, recipient.phone);
       } catch (error) {
         results.push({
-          admin: admin.username,
-          phone: admin.phone,
+          username: recipient.username,
+          rol: recipient.rol,
+          phone: recipient.phone,
           success: false,
           error: error.message
         });
         
-        logger.error('[Notifications] ❌ Error enviando a %s: %s', admin.username, error.message);
+        logger.error('[Notifications] ❌ Error enviando a %s (%s): %s', recipient.username, recipient.rol, error.message);
       }
     }
     
@@ -302,7 +389,8 @@ export async function notifyAdmins(tipoError, mensaje, options = {}) {
     // Registrar en BD
     const estado = allSuccess ? 'ENVIADO' : (anySuccess ? 'ENVIADO' : 'ERROR');
     const whatsappMessageID = results.find(r => r.success)?.messageId || null;
-    const errorMensaje = allSuccess ? null : results.filter(r => !r.success).map(r => `${r.admin}: ${r.error}`).join('; ');
+    const errorMensaje = allSuccess ? null : results.filter(r => !r.success).map(r => `${r.username}(${r.rol}): ${r.error}`).join('; ');
+    const recipientSummary = results.map(r => `${r.username}(${r.rol})`).join(', ');
     
     await logNotification(
       tipoError,
@@ -311,16 +399,18 @@ export async function notifyAdmins(tipoError, mensaje, options = {}) {
       phoneNumbers,
       estado,
       whatsappMessageID,
-      { ...metadata, results },
+      { ...metadata, results, recipientSummary },
       errorMensaje
     );
     
     if (allSuccess) {
-      logger.info('[Notifications] ✅ Notificación enviada exitosamente a %d admins', admins.length);
+      logger.info('[Notifications] ✅ Notificación %s enviada exitosamente a %d destinatarios (%s)', 
+        tipoError, recipients.length, recipientSummary);
     } else if (anySuccess) {
-      logger.warn('[Notifications] ⚠️  Notificación enviada parcialmente (%d/%d exitosos)', results.filter(r => r.success).length, admins.length);
+      logger.warn('[Notifications] ⚠️  Notificación %s enviada parcialmente (%d/%d exitosos) - %s', 
+        tipoError, results.filter(r => r.success).length, recipients.length, recipientSummary);
     } else {
-      logger.error('[Notifications] ❌ Error enviando notificación a todos los admins');
+      logger.error('[Notifications] ❌ Error enviando notificación %s a todos los destinatarios', tipoError);
     }
     
     return anySuccess;
@@ -351,7 +441,7 @@ export async function getNotificationHistory(filters = {}) {
   const { tipoError = null, estado = null, limit = 50 } = filters;
   
   try {
-    const pool = await dbService.getConnection();
+    const pool = await getPool();
     
     let query = `
       SELECT TOP (@limit)
@@ -405,7 +495,7 @@ export async function getNotificationHistory(filters = {}) {
  */
 export async function cleanOldNotifications(diasAntiguedad = 90) {
   try {
-    const pool = await dbService.getConnection();
+    const pool = await getPool();
     
     const result = await pool.request()
       .input('dias', sql.Int, diasAntiguedad)
@@ -433,7 +523,7 @@ export async function cleanOldNotifications(diasAntiguedad = 90) {
  */
 export async function getNotificationStats() {
   try {
-    const pool = await dbService.getConnection();
+    const pool = await getPool();
     
     const result = await pool.request().query(`
       SELECT 
@@ -467,9 +557,49 @@ export async function getNotificationStats() {
   }
 }
 
+/**
+ * Envía notificaciones de sistema (solo a administradores)
+ * @param {string} tipoError - Tipo de error del sistema
+ * @param {string} mensaje - Mensaje de la notificación
+ * @param {Object} options - Opciones adicionales
+ * @returns {Promise<boolean>} True si se envió exitosamente
+ */
+export async function notifySystemError(tipoError, mensaje, options = {}) {
+  // Validar que sea un tipo de notificación de sistema
+  if (!SYSTEM_NOTIFICATIONS.includes(tipoError)) {
+    logger.warn('[Notifications] ⚠️  Tipo no válido para notificación de sistema: %s', tipoError);
+    return false;
+  }
+  
+  return await notifyAdmins(tipoError, mensaje, options);
+}
+
+/**
+ * Envía notificaciones operativas (a administradores y supervisores)
+ * @param {string} tipoError - Tipo de notificación operativa
+ * @param {string} mensaje - Mensaje de la notificación
+ * @param {Object} options - Opciones adicionales
+ * @returns {Promise<boolean>} True si se envió exitosamente
+ */
+export async function notifyOperationalIssue(tipoError, mensaje, options = {}) {
+  // Validar que sea un tipo de notificación operativa
+  if (!OPERATIONAL_NOTIFICATIONS.includes(tipoError)) {
+    logger.warn('[Notifications] ⚠️  Tipo no válido para notificación operativa: %s', tipoError);
+    return false;
+  }
+  
+  return await notifyAdmins(tipoError, mensaje, options);
+}
+
 export default {
   notifyAdmins,
+  notifySystemError,
+  notifyOperationalIssue,
   getNotificationHistory,
   cleanOldNotifications,
-  getNotificationStats
+  getNotificationStats,
+  // Constantes para uso externo
+  SYSTEM_NOTIFICATIONS,
+  OPERATIONAL_NOTIFICATIONS,
+  ALL_NOTIFICATION_TYPES
 };

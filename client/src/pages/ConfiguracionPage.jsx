@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
+import { DashboardLayout } from '../components/layout';
 import { configuracionesService } from '../api/services';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Página de Configuración del Sistema
  * Permite a los administradores gestionar configuraciones sin editar archivos .env
  */
 export default function ConfiguracionPage() {
+  const { isAdmin, getDefaultPage } = useAuth();
+
+  // Si no es admin, redirigir a su página por defecto
+  if (!isAdmin) {
+    return <Navigate to={getDefaultPage()} replace />;
+  }
   const [configs, setConfigs] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -247,14 +256,17 @@ export default function ConfiguracionPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-      </div>
+      <DashboardLayout>
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+        </div>
+      </DashboardLayout>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <DashboardLayout>
+      <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Configuración del Sistema</h1>
         <p className="mt-2 text-gray-600">
@@ -306,6 +318,7 @@ export default function ConfiguracionPage() {
       {renderCategoria('WHATSAPP', '💬 Configuración de WhatsApp', 'Credenciales y configuración de la API de WhatsApp Business')}
       {renderCategoria('SYSTEM', '⚙️ Configuración del Sistema', 'Parámetros generales de comportamiento del sistema')}
       {renderCategoria('NOTIFICATIONS', '🔔 Configuración de Notificaciones', 'Control de notificaciones automáticas a clientes')}
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }

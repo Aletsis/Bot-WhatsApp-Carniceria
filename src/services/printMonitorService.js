@@ -19,8 +19,8 @@
 
 import cron from 'node-cron';
 import sql from 'mssql';
-import dbService from './dbService.js';
-import { notifyAdmins } from './notificationService.js';
+import { getPool } from './dbService.js';
+import { notifyOperationalIssue } from './notificationService.js';
 import logger from '../logger.js';
 
 let monitorJob = null;
@@ -36,7 +36,7 @@ let monitorConfig = {
  */
 async function loadConfig() {
   try {
-    const pool = await dbService.getPool();
+    const pool = await getPool();
     
     // Obtener las 3 configuraciones necesarias
     const result = await pool.request()
@@ -81,9 +81,12 @@ async function loadConfig() {
  */
 async function checkUnprintedOrders() {
   try {
-    const pool = await dbService.getPool();
+    logger.debug('🔍 Iniciando checkUnprintedOrders...');
+    const pool = await getPool();
+    logger.debug('✅ Pool de BD obtenido');
     
     // Buscar pedidos problemáticos
+    logger.debug('📊 Ejecutando consulta con timeout: %d minutos', monitorConfig.timeoutMinutes);
     const result = await pool.request()
       .input('timeoutMinutes', sql.Int, monitorConfig.timeoutMinutes)
       .query(`
@@ -103,6 +106,8 @@ async function checkUnprintedOrders() {
           AND p.NotificacionImpresionEnviada IS NULL
         ORDER BY p.Fecha
       `);
+    
+    logger.debug('✅ Consulta ejecutada, encontrados: %d pedidos', result.recordset?.length || 0);
     
     const pedidosProblematicos = result.recordset;
     
@@ -136,13 +141,16 @@ async function checkUnprintedOrders() {
           severidad = 'CRITICAL';
         }
         
-        // Enviar notificación a administradores
-        await notifyAdmins('ORDER_NOT_PRINTED', mensaje, {
+        // Enviar notificación operativa (admin + supervisor)
+        logger.debug('📢 Enviando notificación operativa para pedido %s...', pedido.Folio);
+        await notifyOperationalIssue('ORDER_NOT_PRINTED', mensaje, {
           metadata,
           severidad
         });
+        logger.debug('✅ Notificación enviada exitosamente para pedido %s', pedido.Folio);
         
         // Marcar como notificado en la base de datos
+        logger.debug('💾 Marcando pedido %s como notificado...', pedido.Folio);
         await pool.request()
           .input('pedidoID', sql.BigInt, pedido.PedidoID)
           .query(`
@@ -150,6 +158,7 @@ async function checkUnprintedOrders() {
             SET NotificacionImpresionEnviada = SYSDATETIME()
             WHERE PedidoID = @pedidoID
           `);
+        logger.debug('✅ Pedido %s marcado como notificado', pedido.Folio);
         
         logger.info(`📢 Notificación enviada para pedido ${pedido.Folio} (${pedido.MinutosSinImprimir} min)`);
         
@@ -160,7 +169,8 @@ async function checkUnprintedOrders() {
     }
     
   } catch (error) {
-    logger.error('Error en checkUnprintedOrders:', error);
+    logger.error('Error en checkUnprintedOrders:', error.message);
+    logger.error('Stack trace:', error.stack);
     // No re-lanzar el error para no romper el job programado
   }
 }
@@ -263,7 +273,7 @@ export async function reloadConfig() {
  */
 export async function getUnprintedStats() {
   try {
-    const pool = await dbService.getPool();
+    const pool = await getPool();
     
     const result = await pool.request()
       .input('timeoutMinutes', sql.Int, monitorConfig.timeoutMinutes)
@@ -297,7 +307,7 @@ export async function getUnprintedStats() {
  */
 export async function resetNotificationFlag(pedidoID) {
   try {
-    const pool = await dbService.getPool();
+    const pool = await getPool();
     
     await pool.request()
       .input('pedidoID', sql.BigInt, pedidoID)

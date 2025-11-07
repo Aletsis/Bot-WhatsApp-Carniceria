@@ -54,9 +54,9 @@ async function getPrinterConfig() {
     
     // Actualizar caché
     cachedPrinterConfig = {
-      enabled: enabled?.Valor === 'true',
-      host: host?.Valor || process.env.PRINTER_HOST || '192.168.1.100',
-      port: parseInt(port?.Valor || process.env.PRINTER_PORT || '9100', 10),
+      enabled: enabled?.valorOriginal === 'true' || enabled?.valor === 'true',
+      host: host?.valorOriginal || host?.valor || process.env.PRINTER_HOST || '192.168.1.100',
+      port: parseInt(port?.valorOriginal || port?.valor || process.env.PRINTER_PORT || '9100', 10),
       lastUpdate: now
     };
     

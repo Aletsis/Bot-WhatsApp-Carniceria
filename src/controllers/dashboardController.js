@@ -586,10 +586,10 @@ export async function createUsuario(req, res) {
     }
     
     // Validar rol
-    if (!['admin', 'editor', 'viewer'].includes(rol)) {
+    if (!['admin', 'supervisor', 'editor', 'viewer'].includes(rol)) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Rol inválido. Debe ser: admin, editor o viewer' 
+        error: 'Rol inválido. Debe ser: admin, supervisor, editor o viewer' 
       });
     }
     
@@ -695,6 +695,43 @@ export async function toggleUsuario(req, res) {
     res.json({ success: true });
   } catch (err) {
     logger.error('❌ Error toggle usuario:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+}
+
+/**
+ * Actualiza información de un usuario (nombre, email, whatsapp)
+ */
+export async function updateUsuarioInfo(req, res) {
+  try {
+    const { usuarioId } = req.params;
+    const { nombre, email, numeroWhatsApp } = req.body;
+    
+    const userId = parseInt(usuarioId);
+    
+    // Validar formato de WhatsApp si se proporciona
+    if (numeroWhatsApp && numeroWhatsApp.trim()) {
+      const phoneRegex = /^\+?[1-9]\d{10,14}$/;
+      if (!phoneRegex.test(numeroWhatsApp.replace(/\s/g, ''))) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Formato de número de WhatsApp inválido. Debe incluir código de país (ej: +5214447320220)' 
+        });
+      }
+    }
+    
+    await userService.updateUserInfo(userId, {
+      nombre: nombre?.trim() || null,
+      email: email?.trim() || null,
+      numeroWhatsApp: numeroWhatsApp?.trim() || null
+    });
+    
+    logger.info('✅ Información de usuario actualizada por %s para usuario ID: %s', 
+      req.session?.user?.Username, usuarioId);
+    
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('❌ Error actualizando información de usuario:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 }

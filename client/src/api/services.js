@@ -87,15 +87,22 @@ export const usuariosService = {
     return response.data;
   },
 
-  cambiarPassword: async (id, password) => {
+  updateInfo: async (id, infoData) => {
+    const response = await axios.put(`/dashboard/usuarios/${id}/info`, infoData);
+    return response.data;
+  },
+
+  updatePassword: async (id, newPassword) => {
     const response = await axios.put(`/dashboard/usuarios/${id}/password`, {
-      password,
+      newPassword,
     });
     return response.data;
   },
 
-  toggle: async (id) => {
-    const response = await axios.put(`/dashboard/usuarios/${id}/estado`);
+  updateEstado: async (id, activo) => {
+    const response = await axios.put(`/dashboard/usuarios/${id}/estado`, {
+      activo,
+    });
     return response.data;
   },
 };

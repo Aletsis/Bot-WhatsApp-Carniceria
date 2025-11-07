@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout';
 import { Button, Select, Badge, Card, Loading, Modal, Input } from '../components/common';
 import { pedidosService } from '../api/services';
@@ -12,7 +13,12 @@ export default function PedidosPage() {
   const [fechaFin, setFechaFin] = useState('');
   const [selectedPedido, setSelectedPedido] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const { isEditor, user } = useAuth();
+  const { canEdit, canManageOrders, getDefaultPage, user } = useAuth();
+
+  // Si no puede gestionar pedidos, redirigir a su página por defecto
+  if (!canManageOrders) {
+    return <Navigate to={getDefaultPage()} replace />;
+  }
 
   useEffect(() => {
     loadPedidos();
@@ -215,7 +221,7 @@ export default function PedidosPage() {
                     >
                       Ver Detalles
                     </Button>
-                    {isEditor && (pedido.EstadoImpresion === 'Error' || pedido.EstadoImpresion === 'Pendiente') && (
+                    {canEdit && (pedido.EstadoImpresion === 'Error' || pedido.EstadoImpresion === 'Pendiente') && (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -225,7 +231,7 @@ export default function PedidosPage() {
                         🖨️ Reimprimir
                       </Button>
                     )}
-                    {isEditor && pedido.Estado !== 'Entregado' && pedido.Estado !== 'Cancelado' && (
+                    {canEdit && pedido.Estado !== 'Entregado' && pedido.Estado !== 'Cancelado' && (
                       <Select
                         value={pedido.Estado}
                         onChange={(e) =>
@@ -271,7 +277,7 @@ export default function PedidosPage() {
               </div>
               
               {/* Mostrar botón de reimprimir en el modal si hay error */}
-              {isEditor && (selectedPedido.EstadoImpresion === 'Error' || selectedPedido.EstadoImpresion === 'Pendiente') && (
+              {canEdit && (selectedPedido.EstadoImpresion === 'Error' || selectedPedido.EstadoImpresion === 'Pendiente') && (
                 <div className="mt-3">
                   <Button
                     variant="secondary"
@@ -294,7 +300,7 @@ export default function PedidosPage() {
               {/* Selector de cambio de estado */}
               {selectedPedido.Estado !== 'Entregado' && selectedPedido.Estado !== 'Cancelado' && (
                 <div className="mt-3">
-                  {isEditor ? (
+                  {canEdit ? (
                     <>
                       <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                         Cambiar estado:

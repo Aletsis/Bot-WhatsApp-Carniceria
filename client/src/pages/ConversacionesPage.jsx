@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/layout';
 import { Button, Card, Loading, Badge } from '../components/common';
 import { conversacionesService } from '../api/services';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ConversacionesPage() {
+  const { canViewAll, getDefaultPage } = useAuth();
+
+  // Si no puede ver todo (admin o supervisor), redirigir a su página por defecto
+  if (!canViewAll) {
+    return <Navigate to={getDefaultPage()} replace />;
+  }
   const [conversaciones, setConversaciones] = useState([]);
   const [loading, setLoading] = useState(true);
 
