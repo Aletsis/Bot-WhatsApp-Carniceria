@@ -1,5 +1,5 @@
 import escpos from 'escpos';
-const Network = escpos.Network;
+import Network from 'escpos-network';
 import logger from '../logger.js';
 import sql from 'mssql';
 import { getPool } from './dbService.js';
@@ -171,8 +171,8 @@ export async function printTicket(data) {
       .font('a')
       .align('ct')
       .style('bu')
-      .size(1, 1)
-      .text('CARNICERÍAS LA BLANQUITA')
+      .size(0, 0)
+      .text('CARNICERIAS LA BLANQUITA')
       .text('PEDIDO')
       .style('normal')
       .text('')
@@ -189,8 +189,15 @@ export async function printTicket(data) {
       .text('')
       .drawLine()
       .text('DETALLE DEL PEDIDO:')
-      .drawLine()
-      .text(data.contenido)
+      .drawLine();
+
+    // Procesar contenido línea por línea para preservar saltos de línea
+    const contenidoLineas = data.contenido.split('\n');
+    contenidoLineas.forEach(linea => {
+      printer.text(linea.trim()); // trim() para eliminar espacios extra
+    });
+
+    printer
       .text('')
       .drawLine()
       .align('ct')

@@ -21,9 +21,31 @@ export const Button = ({
     lg: 'px-6 py-3 text-lg',
   };
 
+  // Estilos inline como respaldo
+  const buttonStyle = {
+    fontWeight: '500',
+    borderRadius: '0.5rem',
+    transition: 'all 0.2s',
+    outline: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...(variant === 'primary' && {
+      backgroundColor: '#dc2626',
+      color: 'white',
+      ...(size === 'lg' && {
+        padding: '0.75rem 1.5rem',
+        fontSize: '1.125rem'
+      })
+    })
+  };
+
   return (
     <button
       className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${className}`}
+      style={buttonStyle}
       {...props}
     >
       {children}
@@ -37,10 +59,22 @@ export const Input = ({
   className = '', 
   ...props 
 }) => {
+  const inputStyle = {
+    width: '100%',
+    padding: '0.5rem 0.75rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '0.5rem',
+    fontSize: '0.875rem',
+    backgroundColor: 'white',
+    outline: 'none',
+    transition: 'all 0.2s',
+    ...(error && { borderColor: '#ef4444' })
+  };
+
   return (
-    <div className="w-full">
+    <div className="w-full" style={{width: '100%'}}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label className="block text-sm font-medium text-gray-700 mb-1" style={{display: 'block', fontSize: '0.875rem', fontWeight: '500', color: '#374151', marginBottom: '0.25rem'}}>
           {label}
         </label>
       )}
@@ -48,10 +82,11 @@ export const Input = ({
         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent ${
           error ? 'border-red-500' : ''
         } ${className}`}
+        style={inputStyle}
         {...props}
       />
       {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
+        <p className="mt-1 text-sm text-red-600" style={{marginTop: '0.25rem', fontSize: '0.875rem', color: '#dc2626'}}>{error}</p>
       )}
     </div>
   );

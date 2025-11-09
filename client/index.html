@@ -3,13 +3,133 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Sistema de gestión para Carnicerías La Blanquita" />
     <meta name="theme-color" content="#dc2626" />
     <title>Dashboard - Carnicerías La Blanquita</title>
+    
+    <!-- Estilos críticos inline para mejorar LCP -->
+    <style>
+      /* Critical CSS - Above the fold styles */
+      * { box-sizing: border-box; }
+      html { line-height: 1.15; -webkit-text-size-adjust: 100%; }
+      body { 
+        margin: 0; 
+        font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+        background-color: #f9fafb;
+        color: #0f172a;
+        min-height: 100vh;
+      }
+      #root { 
+        width: 100%; 
+        min-height: 100vh; 
+        display: flex;
+        flex-direction: column;
+      }
+      
+      /* Critical login page styles */
+      .login-container {
+        display: flex;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(to bottom right, #fef2f2, #fee2e2);
+        padding: 1rem;
+      }
+      
+      .login-card {
+        width: 100%;
+        max-width: 28rem;
+        background: white;
+        border-radius: 0.75rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        padding: 2rem;
+      }
+      
+      /* Critical text styles */
+      .text-4xl { font-size: 2.25rem; line-height: 2.5rem; }
+      .text-3xl { font-size: 1.875rem; line-height: 2.25rem; }
+      .text-xl { font-size: 1.25rem; line-height: 1.75rem; }
+      .text-base { font-size: 1rem; line-height: 1.5rem; }
+      .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+      
+      .font-bold { font-weight: 700; }
+      .font-extrabold { font-weight: 800; }
+      .font-medium { font-weight: 500; }
+      
+      .text-center { text-align: center; }
+      .text-gray-900 { color: #111827; }
+      .text-gray-600 { color: #4b5563; }
+      .text-gray-700 { color: #374151; }
+      
+      /* Critical spacing */
+      .mt-2 { margin-top: 0.5rem; }
+      .mt-4 { margin-top: 1rem; }
+      .mt-8 { margin-top: 2rem; }
+      .mb-4 { margin-bottom: 1rem; }
+      .space-y-6 > * + * { margin-top: 1.5rem; }
+      .space-y-8 > * + * { margin-top: 2rem; }
+      
+      /* Critical colors */
+      .text-primary-600 { color: #dc2626; }
+      .bg-primary-600 { background-color: #dc2626; }
+      .bg-primary-700 { background-color: #b91c1c; }
+      
+      /* Loading spinner para mejorar percepción */
+      .loading-spinner {
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        border: 3px solid #f3f3f3;
+        border-radius: 50%;
+        border-top: 3px solid #dc2626;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Ocultar contenido hasta que CSS completo cargue */
+      .css-loading #root { opacity: 0; }
+      .css-loaded #root { 
+        opacity: 1; 
+        transition: opacity 0.3s ease-in-out;
+      }
+    </style>
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="css-loading">
+    <div id="root">
+      <!-- Loading inicial para mejorar LCP -->
+      <!-- Clases para forzar generación de Tailwind -->
+      <!-- Test: w-full px-3 py-2 border border-gray-300 rounded-lg bg-primary-600 hover:bg-primary-700 text-white focus:ring-2 focus:ring-primary-500 -->
+      <div class="login-container min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-100">
+        <div class="login-card max-w-md w-full space-y-8 p-8 bg-white rounded-xl shadow-2xl">
+          <div class="text-center">
+            <h1 class="text-4xl font-bold text-gray-900">🥩</h1>
+            <h2 class="mt-4 text-3xl font-extrabold text-gray-900">
+              Carnicería La Blanquita
+            </h2>
+            <div class="mt-4">
+              <div class="loading-spinner"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      // Mejorar LCP removiendo el loading cuando CSS esté listo
+      document.addEventListener('DOMContentLoaded', function() {
+        // Remover loading class cuando el CSS esté cargado
+        setTimeout(function() {
+          document.body.classList.remove('css-loading');
+          document.body.classList.add('css-loaded');
+        }, 100);
+      });
+    </script>
+    
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

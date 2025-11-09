@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iPad Test - Carnicería La Blanquita</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-item {
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #007AFF;
+            background: #f8f9fa;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        button {
+            background: #007AFF;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        #log {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🥩 iPad Test - Carnicería La Blanquita</h1>
+        <p>Esta página verifica la compatibilidad con iPad/Safari.</p>
+        
+        <div class="test-item">
+            <strong>🌐 URL Actual:</strong> <span id="current-url"></span>
+        </div>
+        
+        <div class="test-item">
+            <strong>📱 User Agent:</strong> <span id="user-agent"></span>
+        </div>
+        
+        <div class="test-item">
+            <strong>📊 Tamaño de Pantalla:</strong> <span id="screen-size"></span>
+        </div>
+        
+        <div class="test-item">
+            <strong>⚡ JavaScript:</strong> <span id="js-test" class="success">✅ Funcionando</span>
+        </div>
+
+        <div class="test-item">
+            <strong>🎨 CSS Grid:</strong> <span id="grid-test"></span>
+        </div>
+
+        <div class="test-item">
+            <strong>📦 ES6 Modules:</strong> <span id="es6-test"></span>
+        </div>
+
+        <div class="test-item">
+            <strong>🔗 Fetch API:</strong> <span id="fetch-test"></span>
+        </div>
+
+        <div class="test-item">
+            <strong>🖱️ Touch Events:</strong> <span id="touch-test"></span>
+        </div>
+
+        <button onclick="testBackendConnection()">🔌 Probar Conexión Backend</button>
+        <button onclick="testReactApp()">⚛️ Probar React App</button>
+        <button onclick="clearLog()">🗑️ Limpiar Log</button>
+
+        <h3>📋 Log de Pruebas:</h3>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        // Función de logging
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : 'ℹ️';
+            logDiv.textContent += `[${timestamp}] ${prefix} ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // Test inicial
+        function runInitialTests() {
+            // Información básica
+            document.getElementById('current-url').textContent = window.location.href;
+            document.getElementById('user-agent').textContent = navigator.userAgent;
+            document.getElementById('screen-size').textContent = `${screen.width}x${screen.height} (viewport: ${window.innerWidth}x${window.innerHeight})`;
+
+            log('🚀 Iniciando tests de compatibilidad...');
+            log('📱 Dispositivo: ' + (navigator.userAgent.includes('iPad') ? 'iPad detectado' : 'Otro dispositivo'));
+
+            // Test CSS Grid
+            const gridSupported = CSS.supports('display', 'grid');
+            document.getElementById('grid-test').innerHTML = gridSupported ? 
+                '<span class="success">✅ Soportado</span>' : 
+                '<span class="error">❌ No soportado</span>';
+            log('🎨 CSS Grid: ' + (gridSupported ? 'Soportado' : 'No soportado'), gridSupported ? 'success' : 'error');
+
+            // Test ES6
+            try {
+                eval('const test = () => {}; let x = [1,2,3]; const y = {...x};');
+                document.getElementById('es6-test').innerHTML = '<span class="success">✅ Soportado</span>';
+                log('📦 ES6: Soportado', 'success');
+            } catch (e) {
+                document.getElementById('es6-test').innerHTML = '<span class="error">❌ Error: ' + e.message + '</span>';
+                log('📦 ES6 Error: ' + e.message, 'error');
+            }
+
+            // Test Fetch API
+            const fetchSupported = typeof fetch !== 'undefined';
+            document.getElementById('fetch-test').innerHTML = fetchSupported ? 
+                '<span class="success">✅ Soportado</span>' : 
+                '<span class="error">❌ No soportado</span>';
+            log('🔗 Fetch API: ' + (fetchSupported ? 'Soportado' : 'No soportado'), fetchSupported ? 'success' : 'error');
+
+            // Test Touch Events
+            const touchSupported = 'ontouchstart' in window;
+            document.getElementById('touch-test').innerHTML = touchSupported ? 
+                '<span class="success">✅ Soportado</span>' : 
+                '<span class="error">❌ No soportado</span>';
+            log('🖱️ Touch Events: ' + (touchSupported ? 'Soportado' : 'No soportado'), touchSupported ? 'success' : 'error');
+        }
+
+        // Test conexión backend
+        async function testBackendConnection() {
+            log('🔌 Probando conexión al backend...');
+            
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('✅ Backend conectado exitosamente', 'success');
+                    log('📊 Información del servidor: ' + JSON.stringify(data, null, 2));
+                } else {
+                    log('❌ Backend respondió con error: ' + JSON.stringify(data), 'error');
+                }
+            } catch (error) {
+                log('❌ Error conectando al backend: ' + error.message, 'error');
+                log('💡 Posibles causas: CORS, red, servidor caído');
+            }
+        }
+
+        // Test React App
+        function testReactApp() {
+            log('⚛️ Intentando cargar React App...');
+            
+            // Intentar navegar a la app principal
+            try {
+                window.location.href = '/';
+            } catch (error) {
+                log('❌ Error navegando a React App: ' + error.message, 'error');
+            }
+        }
+
+        // Limpiar log
+        function clearLog() {
+            document.getElementById('log').textContent = '';
+        }
+
+        // Error handler global
+        window.onerror = function(msg, url, line, col, error) {
+            log(`❌ Error JavaScript: ${msg} en línea ${line}`, 'error');
+            return false;
+        };
+
+        // Ejecutar tests al cargar
+        document.addEventListener('DOMContentLoaded', runInitialTests);
+    </script>
+</body>
+</html>

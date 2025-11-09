@@ -1,0 +1,28 @@
+/* CSS de prueba para verificar que los estilos se aplican */
+.test-red {
+  background-color: red !important;
+  color: white !important;
+  padding: 10px !important;
+}
+
+.test-input {
+  width: 100% !important;
+  padding: 8px 12px !important;
+  border: 1px solid #d1d5db !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+}
+
+.test-button {
+  background-color: #dc2626 !important;
+  color: white !important;
+  padding: 12px 24px !important;
+  border: none !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+}
+
+.test-button:hover {
+  background-color: #b91c1c !important;
+}

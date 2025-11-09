@@ -744,7 +744,9 @@ export async function reimprimirPedido(req, res) {
     const { pedidoId } = req.params;
     
     // Verificar si la impresión está habilitada desde configuración
-    const printerEnabledConfig = await configService.getConfig('PRINTER_ENABLED');
+    const allConfigs = await configService.getAllConfigs();
+    const printerConfigs = allConfigs.PRINTER || [];
+    const printerEnabledConfig = printerConfigs.find(config => config.Clave === 'PRINTER_ENABLED');
     const isPrintingEnabled = printerEnabledConfig?.Valor === 'true';
     
     if (!isPrintingEnabled) {
