@@ -22,6 +22,7 @@ import backupService from './src/services/backupService.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Cargar configuración de entorno
 dotenv.config();
 
 function checkEnv() {
@@ -29,23 +30,13 @@ function checkEnv() {
       'DB_HOST',
       'DB_USER',
       'DB_PASS',
-      'DB_NAME',
-      'PHONE_NUMBER_ID',
-      'WHATSAPP_TOKEN',
-      'SESSION_SECRET',
-      'WEBHOOK_VERIFY_TOKEN'
+      'DB_NAME'
     ];
     const missing = required.filter(k => !process.env[k]);
     if (missing.length) {
-      logger.error('❌ Faltan variables de entorno:', missing.join(', '));
-      logger.error('💡 Asegúrate de tener un archivo .env con todas las variables requeridas');
-      process.exit(1);
-    }
-    
-    // Validar longitud mínima del SESSION_SECRET
-    if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.length < 32) {
-      logger.error('❌ SESSION_SECRET debe tener al menos 32 caracteres');
-      logger.error('💡 Genera uno con: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+      logger.error('❌ Faltan variables de entorno críticas para la base de datos:', missing.join(', '));
+      logger.error('💡 Asegúrate de tener un archivo .env con las variables de base de datos requeridas');
+      logger.info('ℹ️  Las variables de WhatsApp se configurarán desde el Dashboard');
       process.exit(1);
     }
 }
@@ -58,8 +49,17 @@ const isProduction = process.env.NODE_ENV === 'production';
 app.set('trust proxy', isProduction ? 1 : 'loopback');
 
 // Configurar sesiones
+const sessionSecret = process.env.SESSION_SECRET || 
+  // Generar secret temporal si no existe (se configurará desde Dashboard)
+  require('crypto').randomBytes(32).toString('hex');
+
+if (!process.env.SESSION_SECRET) {
+  logger.warn('⚠️  SESSION_SECRET no configurado, usando secret temporal');
+  logger.info('ℹ️  Configura SESSION_SECRET desde el Dashboard para persistir sesiones entre reinicios');
+}
+
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -173,9 +173,13 @@ async function initApp() {
     await getPool();
     logger.info('[DB Init] 🔌 Pool de conexión inicializado');
     
-    // Validar configuración de seguridad del webhook
+    // Validar configuración de seguridad del webhook (no crítico en esta versión)
     logger.info('🔐 Validando configuración de seguridad...');
-    validateWebhookSecurityConfig();
+    try {
+      validateWebhookSecurityConfig();
+    } catch (err) {
+      logger.warn('⚠️  Configuración de seguridad de webhook no completa - será configurable desde Dashboard');
+    }
     
     // Restaurar timeouts activos desde BD (sobrevivir a reinicios)
     await restoreActiveTimeouts();

@@ -276,6 +276,26 @@ async function createDatabase(dbName) {
     `);
     logger.info('[DB Init] ✅ Configuraciones por defecto insertadas (incluye sistema de notificaciones)');
     
+    // Aplicar fixes de configuraciones (migraciones 11 y 12)
+    await pool.request().query(`
+      -- Fix migración 11: Corregir valores de timeout (ms a minutos)
+      UPDATE Configuraciones 
+      SET Valor = '5',
+          Descripcion = 'Timeout de sesión en minutos (5 min default)'
+      WHERE Clave = 'SESSION_TIMEOUT' AND Valor != '5';
+      
+      UPDATE Configuraciones 
+      SET Valor = '30',
+          Descripcion = 'Timeout de conversación en minutos (30 min default)'
+      WHERE Clave = 'CONVERSATION_TIMEOUT' AND Valor != '30';
+      
+      -- Fix migración 12: Asegurar que configuraciones sean editables
+      UPDATE Configuraciones 
+      SET Editable = 1
+      WHERE Editable != 1;
+    `);
+    logger.info('[DB Init] ✅ Fixes de configuraciones aplicados (migraciones 11-12)');
+    
     // Crear tabla Mensajes (historial de chats)
     await pool.request().query(`
       CREATE TABLE Mensajes (
@@ -333,7 +353,17 @@ async function createDatabase(dbName) {
       CREATE INDEX IX_Conversaciones_UltimaInteraccion ON Conversaciones(UltimaInteraccion);
       CREATE INDEX IX_Conversaciones_NumeroTelefono_Version ON Conversaciones(NumeroTelefono, Version);
     `);
-    logger.info('[DB Init] ✅ Índices adicionales creados');
+    logger.info('[DB Init] ✅ Índices básicos creados');
+    
+    // Crear índices adicionales de la migración 17
+    await pool.request().query(`
+      CREATE INDEX IX_Pedidos_Folio ON Pedidos(Folio);
+      CREATE INDEX IX_Clientes_Nombre ON Clientes(Nombre);
+      CREATE INDEX IX_Clientes_Activo ON Clientes(Activo);
+      CREATE INDEX IX_Conversaciones_Estado_UltimaInteraccion ON Conversaciones(Estado, UltimaInteraccion);
+      CREATE INDEX IX_Pedidos_Estado_Fecha ON Pedidos(Estado, Fecha DESC);
+    `);
+    logger.info('[DB Init] ✅ Índices adicionales de migración 17 creados');
     
     // Crear índice filtrado para pedidos no impresos (monitoreo de impresión)
     await pool.request().query(`
@@ -388,6 +418,109 @@ async function createDatabase(dbName) {
 }
 
 /**
+ * Aplica actualizaciones y fixes de configuración a base de datos existente
+ * @param {string} dbName - Nombre de la base de datos
+ */
+async function applyConfigurationFixes(dbName) {
+  try {
+    const pool = await getPool();
+    logger.info('[DB Init] 🔧 Aplicando fixes de configuración...');
+    
+    // Verificar si la tabla Configuraciones existe
+    const configTableExists = await pool.request().query(`
+      SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Configuraciones'
+    `);
+    
+    if (configTableExists.recordset[0].cnt === 0) {
+      logger.warn('[DB Init] ⚠️  Tabla Configuraciones no existe, omitiendo fixes');
+      return;
+    }
+    
+    // Aplicar fixes de las migraciones 11 y 12
+    const result = await pool.request().query(`
+      -- Fix migración 11: Corregir valores de timeout (ms a minutos)
+      UPDATE Configuraciones 
+      SET Valor = '5',
+          Descripcion = 'Timeout de sesión en minutos (5 min default)',
+          FechaActualizacion = SYSDATETIME()
+      WHERE Clave = 'SESSION_TIMEOUT' AND Valor != '5';
+      
+      SELECT @@ROWCOUNT as SessionTimeoutUpdated;
+    `);
+    
+    await pool.request().query(`
+      UPDATE Configuraciones 
+      SET Valor = '30',
+          Descripcion = 'Timeout de conversación en minutos (30 min default)',
+          FechaActualizacion = SYSDATETIME()
+      WHERE Clave = 'CONVERSATION_TIMEOUT' AND Valor != '30';
+    `);
+    
+    await pool.request().query(`
+      -- Fix migración 12: Asegurar que configuraciones sean editables
+      UPDATE Configuraciones 
+      SET Editable = 1,
+          FechaActualizacion = SYSDATETIME()
+      WHERE Editable != 1;
+    `);
+    
+    logger.info('[DB Init] ✅ Fixes de configuración aplicados');
+  } catch (err) {
+    logger.error('[DB Init] ❌ Error aplicando fixes de configuración:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Crea índices faltantes en una base de datos existente
+ * @param {string} dbName - Nombre de la base de datos
+ */
+async function createMissingIndexes(dbName) {
+  try {
+    const pool = await getPool();
+    logger.info('[DB Init] 🔧 Creando índices faltantes...');
+    
+    // Crear índices de la migración 17 si no existen
+    const indexesToCreate = [
+      { name: 'IX_Pedidos_Folio', table: 'Pedidos', sql: 'CREATE INDEX IX_Pedidos_Folio ON Pedidos(Folio)' },
+      { name: 'IX_Clientes_Nombre', table: 'Clientes', sql: 'CREATE INDEX IX_Clientes_Nombre ON Clientes(Nombre)' },
+      { name: 'IX_Clientes_Activo', table: 'Clientes', sql: 'CREATE INDEX IX_Clientes_Activo ON Clientes(Activo)' },
+      { name: 'IX_Conversaciones_Estado_UltimaInteraccion', table: 'Conversaciones', sql: 'CREATE INDEX IX_Conversaciones_Estado_UltimaInteraccion ON Conversaciones(Estado, UltimaInteraccion)' },
+      { name: 'IX_Pedidos_Estado_Fecha', table: 'Pedidos', sql: 'CREATE INDEX IX_Pedidos_Estado_Fecha ON Pedidos(Estado, Fecha DESC)' }
+    ];
+    
+    for (const index of indexesToCreate) {
+      try {
+        // Verificar si el índice ya existe
+        const indexExists = await pool.request()
+          .input('indexName', index.name)
+          .input('tableName', index.table)
+          .query(`
+            SELECT COUNT(*) as cnt 
+            FROM sys.indexes i
+            INNER JOIN sys.objects o ON i.object_id = o.object_id
+            WHERE i.name = @indexName AND o.name = @tableName
+          `);
+        
+        if (indexExists.recordset[0].cnt === 0) {
+          await pool.request().query(index.sql);
+          logger.info(`[DB Init] ✅ Índice creado: ${index.name}`);
+        } else {
+          logger.debug(`[DB Init] ℹ️  Índice ya existe: ${index.name}`);
+        }
+      } catch (err) {
+        logger.warn(`[DB Init] ⚠️  Error creando índice ${index.name}: ${err.message}`);
+      }
+    }
+    
+    logger.info('[DB Init] ✅ Verificación de índices completada');
+  } catch (err) {
+    logger.error('[DB Init] ❌ Error creando índices faltantes:', err.message);
+    throw err;
+  }
+}
+
+/**
  * Crea tablas faltantes en una base de datos existente
  * @param {string} dbName - Nombre de la base de datos
  * @param {string[]} missingTables - Array de nombres de tablas faltantes
@@ -435,6 +568,7 @@ async function createMissingTables(dbName, missingTables) {
             )
           `);
           logger.info('[DB Init] ✅ Tabla Usuarios creada con usuario admin');
+          logger.warn('[DB Init] ⚠️  IMPORTANTE: Cambiar la contraseña del admin en producción');
           break;
           
         case 'LogAccesos':
@@ -486,6 +620,75 @@ async function createMissingTables(dbName, missingTables) {
             CREATE INDEX IX_NotificacionesLog_Severidad ON NotificacionesLog(Severidad);
           `);
           logger.info('[DB Init] ✅ Tabla NotificacionesLog creada');
+          break;
+          
+        case 'Configuraciones':
+          await pool.request().query(`
+            CREATE TABLE Configuraciones (
+              ConfigID INT PRIMARY KEY IDENTITY(1,1),
+              Clave NVARCHAR(100) NOT NULL UNIQUE,
+              Valor NVARCHAR(500) NOT NULL,
+              Descripcion NVARCHAR(500),
+              Tipo NVARCHAR(50) NOT NULL,
+              Categoria NVARCHAR(50) NOT NULL,
+              Editable BIT NOT NULL DEFAULT 1,
+              FechaCreacion DATETIME2 NOT NULL DEFAULT SYSDATETIME(),
+              FechaActualizacion DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+            )
+          `);
+          await pool.request().query(`
+            CREATE INDEX IX_Configuraciones_Categoria ON Configuraciones(Categoria);
+          `);
+          // Insertar configuraciones por defecto
+          await pool.request().query(`
+            INSERT INTO Configuraciones (Clave, Valor, Descripcion, Tipo, Categoria, Editable)
+            VALUES
+            -- === PRINTER ===
+            ('PRINTER_ENABLED', 'false', 'Habilitar/deshabilitar impresión de tickets', 'boolean', 'PRINTER', 1),
+            ('PRINTER_HOST', '192.168.0.100', 'Dirección IP de la impresora ESC/POS', 'string', 'PRINTER', 1),
+            ('PRINTER_PORT', '9100', 'Puerto de la impresora (típicamente 9100)', 'number', 'PRINTER', 1),
+            
+            -- === WHATSAPP ===
+            ('WHATSAPP_TOKEN', '', 'Token de acceso de WhatsApp Business API', 'secret', 'WHATSAPP', 1),
+            ('PHONE_NUMBER_ID', '', 'ID del número de teléfono de WhatsApp', 'string', 'WHATSAPP', 1),
+            ('WEBHOOK_VERIFY_TOKEN', '', 'Token para verificar webhook de Meta', 'secret', 'WHATSAPP', 1),
+            ('APP_SECRET', '', 'App Secret de Meta para verificación de firma', 'secret', 'WHATSAPP', 1),
+            
+            -- === SYSTEM ===
+            ('SESSION_TIMEOUT', '5', 'Timeout de sesión en minutos (5 min default)', 'number', 'SYSTEM', 1),
+            ('CONVERSATION_TIMEOUT', '30', 'Timeout de conversación en minutos (30 min default)', 'number', 'SYSTEM', 1),
+            ('SESSION_TTL_MINUTES', '1440', 'Tiempo de vida de sesión HTTP en minutos (24h default)', 'number', 'SYSTEM', 1),
+            
+            -- === NOTIFICATIONS ===
+            ('NOTIFICATIONS_ENABLED', 'true', 'Habilitar notificaciones automáticas a clientes', 'boolean', 'NOTIFICATIONS', 1),
+            ('ERROR_NOTIFICATIONS_ENABLED', 'true', 'Habilitar notificaciones de errores a administradores', 'boolean', 'NOTIFICATIONS', 1),
+            ('NOTIFICATION_THROTTLE_MINUTES', '15', 'Minutos entre notificaciones del mismo tipo de error', 'number', 'NOTIFICATIONS', 1),
+            ('PRINTING_ERROR_THRESHOLD', '3', 'Cantidad de errores consecutivos antes de alerta crítica', 'number', 'NOTIFICATIONS', 1),
+            ('PRINT_MONITOR_ENABLED', 'true', 'Habilitar monitoreo automático de pedidos no impresos', 'boolean', 'NOTIFICATIONS', 1),
+            ('PRINT_MONITOR_INTERVAL', '5', 'Intervalo en minutos para verificar pedidos no impresos', 'number', 'NOTIFICATIONS', 1),
+            ('PRINT_TIMEOUT_MINUTES', '15', 'Minutos de espera antes de notificar pedido no impreso', 'number', 'NOTIFICATIONS', 1)
+          `);
+          logger.info('[DB Init] ✅ Tabla Configuraciones creada con datos por defecto');
+          break;
+          
+        case 'Mensajes':
+          await pool.request().query(`
+            CREATE TABLE Mensajes (
+              MensajeID BIGINT PRIMARY KEY IDENTITY(1,1),
+              NumeroTelefono NVARCHAR(30) NOT NULL,
+              Tipo NVARCHAR(20) NOT NULL CHECK (Tipo IN ('recibido', 'enviado')),
+              Contenido NVARCHAR(MAX) NOT NULL,
+              TipoMensaje NVARCHAR(50) DEFAULT 'texto',
+              MetadataWhatsApp NVARCHAR(MAX),
+              Estado NVARCHAR(20) DEFAULT 'entregado',
+              Fecha DATETIME2 NOT NULL DEFAULT SYSDATETIME()
+            )
+          `);
+          await pool.request().query(`
+            CREATE INDEX IX_Mensajes_Telefono_Fecha ON Mensajes(NumeroTelefono, Fecha DESC);
+            CREATE INDEX IX_Mensajes_Fecha ON Mensajes(Fecha DESC);
+          `);
+          logger.info('[DB Init] ✅ Tabla Mensajes creada');
           break;
           
         default:
@@ -615,7 +818,18 @@ export async function initializeDatabase() {
       // No cerrar el pool compartido
     }
     
-    logger.info('[DB Init] ✅ Todas las tablas verificadas');
+    // Aplicar actualizaciones y fixes para BDs existentes
+    logger.info('[DB Init] 🔧 Verificando actualizaciones...');
+    try {
+      await applyConfigurationFixes(dbName);
+      await createMissingIndexes(dbName);
+      logger.info('[DB Init] ✅ Actualizaciones aplicadas exitosamente');
+    } catch (updateErr) {
+      logger.warn('[DB Init] ⚠️  Error aplicando actualizaciones (no crítico):', updateErr.message);
+      // No fallar la inicialización por errores de actualización
+    }
+    
+    logger.info('[DB Init] ✅ Todas las tablas verificadas y actualizadas');
     return true;
     
   } catch (err) {
